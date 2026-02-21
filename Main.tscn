@@ -1,0 +1,34 @@
+[gd_scene format=3 uid="uid://bfsaysh0bag7q"]
+
+[ext_resource type="Script" uid="uid://chu57aggtm2ym" path="res://GameStateMachine.gd" id="1_r0du0"]
+[ext_resource type="Script" uid="uid://c44og71alwpgd" path="res://ExplorationState.gd" id="1_uu6xs"]
+[ext_resource type="Script" uid="uid://dhpoeuhjf1o1f" path="res://CombatState.gd" id="2_r0du0"]
+[ext_resource type="Script" uid="uid://ceyn0d16b6xe" path="res://OverworldGrid.gd" id="4_cm0pq"]
+[ext_resource type="Script" uid="uid://qtat6cg6m1bu" path="res://CombatLayer.gd" id="5_3dxm6"]
+[ext_resource type="Script" uid="uid://dpfpq3c3sn75x" path="res://CombatManager.gd" id="5_fos0i"]
+[ext_resource type="Script" uid="uid://bhccyq2dkkmms" path="res://OverworldManager.gd" id="5_lgr22"]
+
+[node name="Main" type="Node2D" unique_id=243155863]
+
+[node name="GameStateMachine" type="Node" parent="." unique_id=1591733233 groups=["gsm"]]
+script = ExtResource("1_r0du0")
+initial_state_path = NodePath("ExplorationState")
+
+[node name="ExplorationState" type="Node" parent="GameStateMachine" unique_id=903614903]
+script = ExtResource("1_uu6xs")
+
+[node name="CombatState" type="Node" parent="GameStateMachine" unique_id=1071874870]
+script = ExtResource("2_r0du0")
+
+[node name="OverworldLayer" type="Node2D" parent="." unique_id=406752613 groups=["overworld_layer"]]
+script = ExtResource("4_cm0pq")
+
+[node name="OverworldManager" type="Node" parent="OverworldLayer" unique_id=1880996924 groups=["overworld_manager"]]
+script = ExtResource("5_lgr22")
+
+[node name="CombatLayer" type="Node2D" parent="." unique_id=5795847 groups=["combat_layer"]]
+visible = false
+script = ExtResource("5_3dxm6")
+
+[node name="CombatManager" type="Node" parent="CombatLayer" unique_id=2017951912 groups=["combat_manager"]]
+script = ExtResource("5_fos0i")
