@@ -15,6 +15,10 @@ run/main_scene="uid://bfsaysh0bag7q"
 config/features=PackedStringArray("4.6", "GL Compatibility")
 config/icon="res://icon.svg"
 
+[autoload]
+
+Session="*uid://bu41he66805l1"
+
 [input]
 
 to_combat={

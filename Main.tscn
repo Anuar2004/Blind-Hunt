@@ -1,12 +1,12 @@
 [gd_scene format=3 uid="uid://bfsaysh0bag7q"]
 
-[ext_resource type="Script" uid="uid://chu57aggtm2ym" path="res://GameStateMachine.gd" id="1_r0du0"]
-[ext_resource type="Script" uid="uid://c44og71alwpgd" path="res://ExplorationState.gd" id="1_uu6xs"]
-[ext_resource type="Script" uid="uid://dhpoeuhjf1o1f" path="res://CombatState.gd" id="2_r0du0"]
-[ext_resource type="Script" uid="uid://ceyn0d16b6xe" path="res://OverworldLayer.gd" id="4_cm0pq"]
-[ext_resource type="Script" uid="uid://qtat6cg6m1bu" path="res://CombatLayer.gd" id="5_3dxm6"]
-[ext_resource type="Script" uid="uid://dpfpq3c3sn75x" path="res://CombatManager.gd" id="5_fos0i"]
-[ext_resource type="Script" uid="uid://bhccyq2dkkmms" path="res://OverworldManager.gd" id="5_lgr22"]
+[ext_resource type="Script" uid="uid://chu57aggtm2ym" path="res://game_state_machine.gd" id="1_r0du0"]
+[ext_resource type="Script" uid="uid://c44og71alwpgd" path="res://exploration_state.gd" id="1_uu6xs"]
+[ext_resource type="Script" uid="uid://dhpoeuhjf1o1f" path="res://combat_state.gd" id="2_r0du0"]
+[ext_resource type="Script" uid="uid://ceyn0d16b6xe" path="res://overworld_layer.gd" id="4_cm0pq"]
+[ext_resource type="Script" uid="uid://qtat6cg6m1bu" path="res://combat_layer.gd" id="5_3dxm6"]
+[ext_resource type="Script" uid="uid://dpfpq3c3sn75x" path="res://combat_manager.gd" id="5_fos0i"]
+[ext_resource type="Script" uid="uid://bhccyq2dkkmms" path="res://overworld_manager.gd" id="5_lgr22"]
 
 [node name="Main" type="Node2D" unique_id=243155863]
 

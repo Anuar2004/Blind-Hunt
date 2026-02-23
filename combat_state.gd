@@ -1,4 +1,3 @@
-# res://scripts/states/CombatState.gd
 extends BaseState
 class_name CombatState
 
@@ -17,7 +16,7 @@ func enter(_data := {}):
 
 func exit():
 	print("EXIT: Combat")
-	
+
 func _on_combat_finished(result: Dictionary) -> void:
 	machine.change_state("ExplorationState", result)
 

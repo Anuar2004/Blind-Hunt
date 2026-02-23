@@ -2,6 +2,7 @@ extends Node
 class_name OverworldManager
 
 signal encounter_requested(data: Dictionary)
+signal world_changed
 
 const CELL_SIZE := 64
 
@@ -11,24 +12,23 @@ const DIRECTIONS := [
 	Vector2i(-1, 1), Vector2i(0, 1), Vector2i(1, 1),
 ]
 
-var world: Dictionary = {}        # Vector2i -> Dictionary (данные клетки)
-var player_pos: Vector2i = Vector2i.ZERO
-var observations: Array = []
 var last_sense_result: Array = []
 var last_sense_type: String = ""
 
 func _ready():
 	randomize()
-	ensure_ring_with_minimum_senses(player_pos)
+	ensure_ring_with_minimum_senses(Session.player_pos)
 
 # ------------------------------------------------------------
 # ДВИЖЕНИЕ
 # ------------------------------------------------------------
 
 func try_move(dir: Vector2i) -> void:
-	player_pos += dir
-	ensure_ring_with_minimum_senses(player_pos)
+	Session.player_pos += dir
+	Session.add_log("Ты сделал шаг.")
+	ensure_ring_with_minimum_senses(Session.player_pos)
 	resolve_current_cell()
+	emit_signal("world_changed")
 
 # ------------------------------------------------------------
 # ГЕНЕРАЦИЯ
@@ -46,11 +46,13 @@ func ensure_ring_with_minimum_senses(center: Vector2i) -> void:
 	for d in DIRECTIONS:
 		var pos = center + d
 
-		if world.has(pos):
-			missing[world[pos]["sense_type"]] = false
+		if Session.world.has(pos):
+			var st = Session.world[pos].get("sense_type", "")
+			if missing.has(st):
+				missing[st] = false
 		else:
 			var cell := generate_cell(pos)
-			world[pos] = cell
+			Session.world[pos] = cell
 			new_cells.append(cell)
 			missing[cell["sense_type"]] = false
 
@@ -67,7 +69,6 @@ func ensure_ring_with_minimum_senses(center: Vector2i) -> void:
 
 func generate_cell(pos: Vector2i) -> Dictionary:
 	var senses = ["hearing", "smell", "echo"]
-
 	var sense = senses.pick_random()
 
 	return {
@@ -102,16 +103,22 @@ func use_sense(sense_type: String, level: int) -> Array:
 	last_sense_type = sense_type
 	last_sense_result = []
 
+	match sense_type:
+		"hearing": Session.add_log("Ты прислушался.")
+		"smell": Session.add_log("Ты принюхался.")
+		"echo": Session.add_log("Ты прислушался к эху.")
+		_: Session.add_log("Ты используешь чувство.")
+
 	var result := []
-	var origin := player_pos
+	var origin := Session.player_pos
 
 	for d in DIRECTIONS:
 		var pos = origin + d
-		if not world.has(pos):
+		if not Session.world.has(pos):
 			continue
 
-		var cell = world[pos]
-		if cell["sense_type"] != sense_type:
+		var cell = Session.world[pos]
+		if cell.get("sense_type", "") != sense_type:
 			continue
 
 		var dirs: Array
@@ -121,7 +128,7 @@ func use_sense(sense_type: String, level: int) -> Array:
 			3: dirs = [d]
 			_: dirs = [d]
 
-		var content = cell["content_type"]
+		var content = str(cell.get("content_type", "unknown"))
 
 		var entry = {"content": content, "dirs": dirs}
 		result.append(entry)
@@ -129,6 +136,7 @@ func use_sense(sense_type: String, level: int) -> Array:
 
 		_store_observation(origin, sense_type, content, dirs)
 
+	emit_signal("world_changed")
 	return result
 
 func _get_blurred_dirs(real_dir: Vector2i, spread: int) -> Array:
@@ -148,33 +156,46 @@ func _get_blurred_dirs(real_dir: Vector2i, spread: int) -> Array:
 # ------------------------------------------------------------
 
 func resolve_current_cell() -> void:
-	if not world.has(player_pos):
+	var cell = Session.world.get(Session.player_pos, null)
+	if cell == null:
 		return
 
-	var cell = world[player_pos]
-
-	if cell["content_type"] == "large_enemy" and not cell["resolved"]:
+	if cell.get("content_type", "") == "large_enemy" and not cell.get("resolved", false):
 		cell["resolved"] = true
 
-		emit_signal("encounter_requested", {
-			"world_cell": player_pos,
-			"danger": cell["intensity"]
-		})
+		Session.add_log("Опасность совсем рядом!")
+
+		# EncounterData (контракт на вход в бой)
+		var encounter := {
+			"encounter_id": str(Time.get_unix_time_from_system()),
+			"source_cell": Session.player_pos,
+			"kind": "combat",
+			"enemy_pack": "large_enemy",
+			"danger": int(cell.get("intensity", 1)),
+			"seed": int(Session.seed_value)
+		}
+
+		emit_signal("encounter_requested", encounter)
 
 func _store_observation(origin: Vector2i, sense_type: String, content: String, dirs: Array) -> void:
-	# Если уже есть такая запись (тот же origin + sense + content) — обновим dirs
-	for obs in observations:
+	for obs in Session.observations:
 		if obs["origin"] == origin and obs["sense_type"] == sense_type and obs["content"] == content:
 			obs["dirs"] = dirs
 			return
 
-	observations.append({
+	Session.observations.append({
 		"origin": origin,
 		"sense_type": sense_type,
 		"content": content,
 		"dirs": dirs
 	})
-	
+
 func clear_last_sense() -> void:
 	last_sense_type = ""
 	last_sense_result.clear()
+	Session.add_log("Ты прекращаешь прислушиваться.")
+	emit_signal("world_changed")
+
+func use_sense_by_skill(sense_type: String) -> Array:
+	var level := int(Session.skills.get(sense_type, 1))
+	return use_sense(sense_type, level)
