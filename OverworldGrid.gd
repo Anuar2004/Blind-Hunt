@@ -1,34 +1,164 @@
 extends Node2D
 
-const GRID_WIDTH := 10 #Размеры карты, возможно потом будут ненужными, я хочу сделать бесконечный открытый мир
-const GRID_HEIGHT := 10 #Размеры карты, возможно потом будут ненужными, я хочу сделать бесконечный открытый мир
 const CELL_SIZE := 64
 
-var overworld_manager: Node
+var overworld_manager: OverworldManager
 
-func _ready(): #генерируется все клетки карты
+# Временный результат (мгновенная подсветка)
+var last_sense_result: Array = []
+var last_sense_type: String = ""
+
+func _ready():
 	overworld_manager = get_tree().get_first_node_in_group("overworld_manager")
-	
-func _process(_delta):
-	queue_redraw() #встроенная функция которая отрисосывает layout при помощи функции _draw
+	queue_redraw()
+
+# ------------------------------------------------------------
+# INPUT (клавиши 1 / 2 / 3)
+# ------------------------------------------------------------
+
+func _input(event):
+	if overworld_manager == null:
+		return
+
+	if event is InputEventKey and event.pressed and not event.echo:
+		match event.keycode:
+			KEY_1:
+				last_sense_type = "hearing"
+				last_sense_result = overworld_manager.use_sense("hearing", 1)
+				queue_redraw()
+
+			KEY_2:
+				last_sense_type = "smell"
+				last_sense_result = overworld_manager.use_sense("smell", 1)
+				queue_redraw()
+
+			KEY_3:
+				last_sense_type = "echo"
+				last_sense_result = overworld_manager.use_sense("echo", 1)
+				queue_redraw()
+
+			KEY_0:
+				last_sense_result.clear()
+				last_sense_type = ""
+				queue_redraw()
+
+# ------------------------------------------------------------
+# DRAW
+# ------------------------------------------------------------
 
 func _draw():
-	# Линии сетки
-	for x in range(GRID_WIDTH + 1):
-		draw_line(Vector2(x * CELL_SIZE, 0), Vector2(x * CELL_SIZE, GRID_HEIGHT * CELL_SIZE), Color.WHITE, 2.0)
-	for y in range(GRID_HEIGHT + 1):
-		draw_line(Vector2(0, y * CELL_SIZE), Vector2(GRID_WIDTH * CELL_SIZE, y * CELL_SIZE), Color.WHITE, 2.0)
+	if overworld_manager == null:
+		return
 
-	# Маркер клетки игрока (квадрат в центре клетки)
-	var ppos = overworld_manager.player_pos
-	var grid_map = overworld_manager.grid
-	
-	var rect_pos = Vector2(ppos.x * CELL_SIZE, ppos.y * CELL_SIZE)
-	draw_rect(Rect2(rect_pos + Vector2(8, 8), Vector2(CELL_SIZE - 16, CELL_SIZE - 16)), Color(0.2, 0.8, 1.0, 0.35), true)
+	var world: Dictionary = overworld_manager.world
+	var player_pos: Vector2i = overworld_manager.player_pos
 
-	# (Опционально) подсветим ENEMY клетки, чтобы видеть где они
-	for y in range(GRID_HEIGHT):
-		for x in range(GRID_WIDTH):
-			if grid_map[y][x]["type"] == "ENEMY":
-				var p = Vector2(x * CELL_SIZE, y * CELL_SIZE)
-				draw_rect(Rect2(p + Vector2(18, 18), Vector2(CELL_SIZE - 36, CELL_SIZE - 36)), Color(1.0, 0.2, 0.2, 0.25), true)
+	# --- Рисуем все сгенерированные клетки ---
+	for pos in world.keys():
+		var screen_pos := Vector2(pos.x * CELL_SIZE, pos.y * CELL_SIZE)
+
+		draw_rect(
+			Rect2(screen_pos, Vector2(CELL_SIZE, CELL_SIZE)),
+			Color.WHITE,
+			false,
+			1.5
+		)
+
+	# --- Игрок ---
+	var player_screen := Vector2(player_pos.x * CELL_SIZE, player_pos.y * CELL_SIZE)
+	draw_rect(
+		Rect2(player_screen + Vector2(8,8), Vector2(CELL_SIZE - 16, CELL_SIZE - 16)),
+		Color(0.2, 0.8, 1.0, 0.6),
+		true
+	)
+
+	# --- Память игрока (размытые наблюдения) ---
+	_draw_observations()
+
+	# --- Мгновенная подсветка текущего сенсора ---
+	_draw_current_sense(player_pos)
+
+# ------------------------------------------------------------
+# ОТРИСОВКА ТЕКУЩЕГО СЕНСОРА
+# ------------------------------------------------------------
+
+func _draw_current_sense(player_pos: Vector2i):
+	if last_sense_result.is_empty():
+		return
+
+	var color := Color(0.2, 1.0, 0.2, 0.25)
+
+	match last_sense_type:
+		"hearing":
+			color = Color(0.2, 0.6, 1.0, 0.35)
+		"smell":
+			color = Color(0.6, 1.0, 0.2, 0.35)
+		"echo":
+			color = Color(1.0, 0.8, 0.2, 0.35)
+
+	for entry in last_sense_result:
+		if not entry.has("dirs"):
+			continue
+
+		var dirs: Array = entry["dirs"]
+
+		for dir in dirs:
+			if typeof(dir) != TYPE_VECTOR2I:
+				continue
+
+			var wp: Vector2i = player_pos + dir
+			var sp := Vector2(wp.x * CELL_SIZE, wp.y * CELL_SIZE)
+
+			draw_rect(
+				Rect2(sp, Vector2(CELL_SIZE, CELL_SIZE)),
+				color,
+				true
+			)
+
+# ------------------------------------------------------------
+# ОТРИСОВКА ПАМЯТИ (наблюдений)
+# ------------------------------------------------------------
+
+func _draw_observations():
+	var obs_list: Array = overworld_manager.observations
+
+	for obs in obs_list:
+		var origin: Vector2i = obs["origin"]
+		var sense_type: String = obs["sense_type"]
+		var dirs: Array = obs["dirs"]
+		var content: String = str(obs["content"])
+
+		var color := Color(0.2, 1.0, 0.2, 0.15)
+
+		match sense_type:
+			"hearing":
+				color = Color(0.2, 0.6, 1.0, 0.18)
+			"smell":
+				color = Color(0.6, 1.0, 0.2, 0.18)
+			"echo":
+				color = Color(1.0, 0.8, 0.2, 0.18)
+
+		for dir in dirs:
+			if typeof(dir) != TYPE_VECTOR2I:
+				continue
+
+			var wp: Vector2i = origin + dir
+			var sp := Vector2(wp.x * CELL_SIZE, wp.y * CELL_SIZE)
+
+			draw_rect(
+				Rect2(sp, Vector2(CELL_SIZE, CELL_SIZE)),
+				color,
+				true
+			)
+
+			# Временно текст (для отладки)
+			var font := ThemeDB.fallback_font
+			draw_string(
+				font,
+				sp + Vector2(6, CELL_SIZE * 0.6),
+				content,
+				HORIZONTAL_ALIGNMENT_LEFT,
+				CELL_SIZE - 12,
+				14,
+				Color(1,1,1,0.9)
+			)

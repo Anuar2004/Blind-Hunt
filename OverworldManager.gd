@@ -1,139 +1,179 @@
 extends Node
 class_name OverworldManager
 
-const GRID_WIDTH := 10 #Размеры карты, возможно потом будут ненужными, я хочу сделать бесконечный открытый мир
-const GRID_HEIGHT := 10 #Размеры карты, возможно потом будут ненужными, я хочу сделать бесконечный открытый мир
 const CELL_SIZE := 64
 
-var grid := [] #Массив, в котором будет храниться grid-карта, где каждая клетка - это 
-var player_pos := Vector2i(5, 5) #Точка позиция для персонажа, в будущем нужно будет сделать чисто ее центром карты
+const DIRECTIONS := [
+	Vector2i(-1,-1), Vector2i(0,-1), Vector2i(1,-1),
+	Vector2i(-1, 0),               Vector2i(1, 0),
+	Vector2i(-1, 1), Vector2i(0, 1), Vector2i(1, 1),
+]
 
-@onready var overworld_layer := get_parent()
+var world: Dictionary = {}        # Vector2i -> Dictionary (данные клетки)
+var player_pos: Vector2i = Vector2i.ZERO
+var observations: Array = []
+
 @onready var gsm := get_tree().get_first_node_in_group("gsm")
+@onready var overworld_layer := get_tree().get_first_node_in_group("overworld_layer")
 
 func _ready():
-	generate_grid()
+	randomize()
+	ensure_ring_with_minimum_senses(player_pos)
 
-func generate_grid():
-	grid.clear() #чистит поле от старых клеток, пока хз зачем. Наверное просто хорошая практика
-	for y in GRID_HEIGHT: #двойной loop по x и y координатам для создания клеток, в конце ряд добавляется на карту... 
-		#Тут надо пересмотреть метод построения карты, потому что я хочу сделать карту открытой и процедурногенерируемой
-		var row = []
-		for x in GRID_WIDTH:
-			row.append({
-				"type": "ENEMY" if randi() % 5 == 0 else "EMPTY",
-				"discovered": false,
-				"resolved": false
-			})
-		grid.append(row)
+# ------------------------------------------------------------
+# ДВИЖЕНИЕ
+# ------------------------------------------------------------
 
-func try_move(dir: Vector2i): #функция перемещени по карте,
-	var new_pos = player_pos + dir #в зависимости от стороны передвижения, перс получается новую позицию
-	if new_pos.x < 0 or new_pos.x >= GRID_WIDTH: return #не дает выйти за карту
-	if new_pos.y < 0 or new_pos.y >= GRID_HEIGHT: return
+func try_move(dir: Vector2i) -> void:
+	player_pos += dir
+	ensure_ring_with_minimum_senses(player_pos)
+	resolve_current_cell()
+	overworld_layer.queue_redraw()
 
-	player_pos = new_pos
-	resolve_cell() #в зависимости от контента клетки, решает ее
-	update_player_visual()
+# ------------------------------------------------------------
+# ГЕНЕРАЦИЯ
+# ------------------------------------------------------------
 
-func resolve_cell():
-	var cell = grid[player_pos.y][player_pos.x]
-	if cell["type"] == "ENEMY" and not cell["resolved"]:
-		gsm.change_state("CombatState", {
-			"world_cell": player_pos,
-			"danger": 1
+func ensure_ring_with_minimum_senses(center: Vector2i) -> void:
+	var missing := {
+		"hearing": true,
+		"smell": true,
+		"echo": true
+	}
+
+	var new_cells: Array = []
+
+	for d in DIRECTIONS:
+		var pos = center + d
+
+		if world.has(pos):
+			missing[world[pos]["sense_type"]] = false
+		else:
+			var cell := generate_cell(pos)
+			world[pos] = cell
+			new_cells.append(cell)
+			missing[cell["sense_type"]] = false
+
+	# Проверяем, хватает ли всех типов
+	var need: Array = []
+	for k in missing.keys():
+		if missing[k]:
+			need.append(k)
+
+	# Если не хватает — принудительно меняем sense_type у новых клеток
+	for i in range(min(need.size(), new_cells.size())):
+		new_cells[i]["sense_type"] = need[i]
+		new_cells[i]["content_type"] = _random_content_for(need[i])
+
+func generate_cell(pos: Vector2i) -> Dictionary:
+	var senses = ["hearing", "smell", "echo"]
+
+	var sense = senses.pick_random()
+
+	return {
+		"pos": pos,
+		"sense_type": sense,
+		"content_type": _random_content_for(sense),
+		"intensity": randi_range(1, 5),
+		"resolved": false,
+		"revealed": {
+			"hearing": false,
+			"smell": false,
+			"echo": false
+		}
+	}
+
+func _random_content_for(sense_type: String) -> String:
+	match sense_type:
+		"hearing":
+			return ["dogs", "help", "steps"].pick_random()
+		"smell":
+			return ["blood", "fire", "food"].pick_random()
+		"echo":
+			return ["wall", "pit", "large_enemy"].pick_random()
+		_:
+			return "unknown"
+
+# ------------------------------------------------------------
+# СЕНСОРИКА
+# ------------------------------------------------------------
+
+func use_sense(sense_type: String, level: int) -> Array:
+	var result := []
+	var origin := player_pos
+
+	for d in DIRECTIONS:
+		var pos = origin + d
+		if not world.has(pos):
+			continue
+
+		var cell = world[pos]
+		if cell["sense_type"] != sense_type:
+			continue
+
+		var dirs: Array
+		match level:
+			1:
+				dirs = _get_blurred_dirs(d, 3)
+			2:
+				dirs = _get_blurred_dirs(d, 2)
+			3:
+				dirs = [d]
+			_:
+				dirs = [d]
+
+		var content = cell["content_type"]
+
+		# 1) Возвращаем для мгновенного отображения (как сейчас)
+		result.append({
+			"content": content,
+			"dirs": dirs
 		})
 
-func update_player_visual(): #пока нету, ПОНАДОБИТСЯ в будущем при создании ноды игрока
-	var player = get_tree().get_first_node_in_group("player")
-	if player:
-		player.position = overworld_layer.position + Vector2(
-			player_pos.x * CELL_SIZE + CELL_SIZE / 2.0,
-			player_pos.y * CELL_SIZE + CELL_SIZE / 2.0
-		)
+		# 2) Сохраняем именно РАЗМЫТУЮ информацию в память игрока
+		_store_observation(origin, sense_type, content, dirs)
 
-#const DIRECTIONS = [
-	#Vector2i(-1,-1),
-	#Vector2i(0,-1),
-	#Vector2i(1,-1),
-	#Vector2i(-1,0),
-	#Vector2i(1,0),
-	#Vector2i(-1,1),
-	#Vector2i(0,1),
-	#Vector2i(1,1),
-#]
-#
-#var cells = []
-#
-#func generate_cells():
-	#cells.clear()
-#
-	#var senses = ["hearing", "smell", "echo"]
-	#var sense_pool = []
-#
-	## гарантируем минимум 1 каждого
-	#for s in senses:
-		#sense_pool.append(s)
-#
-	#while sense_pool.size() < 8:
-		#sense_pool.append(senses.pick_random())
-#
-	#sense_pool.shuffle()
-#
-	#for i in range(8):
-		#var cell = {
-			#"direction": DIRECTIONS[i],
-			#"sense_type": sense_pool[i],
-			#"content_type": _random_content_for(sense_pool[i]),
-			#"intensity": randi_range(1,5)
-		#}
-#
-		#cells.append(cell)
-#
-#func _random_content_for(sense_type: String) -> String:
-	#match sense_type:
-		#"hearing":
-			#return ["dogs", "help", "steps"].pick_random()
-		#"smell":
-			#return ["blood", "fire", "food"].pick_random()
-		#"echo":
-			#return ["wall", "pit", "large_enemy"].pick_random()
-		#_:
-			#return "unknown"
-#
-#func use_sense(sense_type: String, level: int):
-#
-	#var result = []
-#
-	#for cell in cells:
-		#if cell.sense_type != sense_type:
-			#continue
-#
-		#var entry = {}
-		#entry.content = cell.content_type
-#
-		#match level:
-			#1:
-				#entry.directions = _get_blurred_dirs(cell.direction, 3)
-			#2:
-				#entry.directions = _get_blurred_dirs(cell.direction, 2)
-			#3:
-				#entry.directions = [cell.direction]
-			#_:
-				#entry.directions = [cell.direction]
-#
-		#result.append(entry)
-#
-	#return result
-#
-#func _get_blurred_dirs(real_dir: Vector2i, spread: int):
-	#var dirs = [real_dir]
-#
-	#var possible = DIRECTIONS.duplicate()
-	#possible.erase(real_dir)
-	#possible.shuffle()
-#
-	#for i in range(spread):
-		#dirs.append(possible[i])
-#
-	#return dirs
+	return result
+
+func _get_blurred_dirs(real_dir: Vector2i, spread: int) -> Array:
+	var dirs := [real_dir]
+
+	var possible := DIRECTIONS.duplicate()
+	possible.erase(real_dir)
+	possible.shuffle()
+
+	for i in range(min(spread, possible.size())):
+		dirs.append(possible[i])
+
+	return dirs
+
+# ------------------------------------------------------------
+# ВХОД В КЛЕТКУ
+# ------------------------------------------------------------
+
+func resolve_current_cell() -> void:
+	if not world.has(player_pos):
+		return
+
+	var cell = world[player_pos]
+
+	if cell["content_type"] == "large_enemy" and not cell["resolved"]:
+		gsm.change_state("CombatState", {
+			"world_cell": player_pos,
+			"danger": cell["intensity"]
+		})
+		cell["resolved"] = true
+
+func _store_observation(origin: Vector2i, sense_type: String, content: String, dirs: Array) -> void:
+	# Если уже есть такая запись (тот же origin + sense + content) — обновим dirs
+	for obs in observations:
+		if obs["origin"] == origin and obs["sense_type"] == sense_type and obs["content"] == content:
+			obs["dirs"] = dirs
+			return
+
+	observations.append({
+		"origin": origin,
+		"sense_type": sense_type,
+		"content": content,
+		"dirs": dirs
+	})

@@ -26,6 +26,8 @@ script = ExtResource("4_cm0pq")
 [node name="OverworldManager" type="Node" parent="OverworldLayer" unique_id=1880996924 groups=["overworld_manager"]]
 script = ExtResource("5_lgr22")
 
+[node name="Camera2D" type="Camera2D" parent="OverworldLayer" unique_id=1161584044]
+
 [node name="CombatLayer" type="Node2D" parent="." unique_id=5795847 groups=["combat_layer"]]
 visible = false
 script = ExtResource("5_3dxm6")
