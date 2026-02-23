@@ -1,6 +1,9 @@
 extends Node
 class_name CombatManager
 
+signal changed
+signal combat_finished(result: Dictionary)
+
 const W := 8
 const H := 8
 const CELL_SIZE := 64
@@ -17,7 +20,21 @@ var player_hp := 3
 var active := false
 
 @onready var combat_layer := get_parent() # CombatLayer
-@onready var gsm := get_tree().get_first_node_in_group("gsm")
+
+func handle_player_input(event: InputEvent) -> void:
+	if not active:
+		return
+	if phase != Phase.PLAYER_TURN:
+		return
+
+	var dir := _dir_from_input(event)
+	if dir != Vector2i.ZERO:
+		_try_player_move(dir)
+		return
+
+	if event.is_action_pressed("attack"):
+		_try_player_attack()
+		return
 
 func start_combat(data := {}):
 	active = true
@@ -32,25 +49,7 @@ func start_combat(data := {}):
 
 func end_combat(victory: bool):
 	active = false
-	print("Combat ended. Victory:", victory)
-	# возвращаемся в exploration
-	if gsm:
-		gsm.change_state("ExplorationState", {"victory": victory})
-
-func _unhandled_input(event: InputEvent) -> void:
-	if not active:
-		return
-	if phase != Phase.PLAYER_TURN:
-		return
-
-	var dir := _dir_from_input(event)
-	if dir != Vector2i.ZERO:
-		_try_player_move(dir)
-		return
-
-	if event.is_action_pressed("attack"):
-		_try_player_attack()
-		return
+	emit_signal("combat_finished", {"victory": victory})
 
 func _dir_from_input(event: InputEvent) -> Vector2i:
 	# Важно: диагонали лучше вынести в отдельные действия позже.
@@ -72,6 +71,7 @@ func _try_player_move(dir: Vector2i):
 	player_grid_pos = np
 	_place_player()
 	_end_player_turn()
+	emit_signal("changed")
 
 func _try_player_attack():
 	# атака если враг рядом (8 направлений можно, но пока 4)
@@ -88,6 +88,7 @@ func _try_player_attack():
 		return
 
 	_end_player_turn()
+	emit_signal("changed")
 
 func _end_player_turn():
 	phase = Phase.ENEMY_TURN
@@ -117,6 +118,7 @@ func _enemy_turn():
 	# конец хода врага
 	phase = Phase.PLAYER_TURN
 	print("PLAYER TURN")
+	emit_signal("changed")
 
 func _step_towards(from: Vector2i, to: Vector2i) -> Vector2i:
 	var dx = to.x - from.x

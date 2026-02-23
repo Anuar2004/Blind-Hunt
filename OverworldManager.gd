@@ -1,6 +1,8 @@
 extends Node
 class_name OverworldManager
 
+signal encounter_requested(data: Dictionary)
+
 const CELL_SIZE := 64
 
 const DIRECTIONS := [
@@ -12,9 +14,8 @@ const DIRECTIONS := [
 var world: Dictionary = {}        # Vector2i -> Dictionary (данные клетки)
 var player_pos: Vector2i = Vector2i.ZERO
 var observations: Array = []
-
-@onready var gsm := get_tree().get_first_node_in_group("gsm")
-@onready var overworld_layer := get_tree().get_first_node_in_group("overworld_layer")
+var last_sense_result: Array = []
+var last_sense_type: String = ""
 
 func _ready():
 	randomize()
@@ -28,7 +29,6 @@ func try_move(dir: Vector2i) -> void:
 	player_pos += dir
 	ensure_ring_with_minimum_senses(player_pos)
 	resolve_current_cell()
-	overworld_layer.queue_redraw()
 
 # ------------------------------------------------------------
 # ГЕНЕРАЦИЯ
@@ -99,6 +99,9 @@ func _random_content_for(sense_type: String) -> String:
 # ------------------------------------------------------------
 
 func use_sense(sense_type: String, level: int) -> Array:
+	last_sense_type = sense_type
+	last_sense_result = []
+
 	var result := []
 	var origin := player_pos
 
@@ -113,24 +116,17 @@ func use_sense(sense_type: String, level: int) -> Array:
 
 		var dirs: Array
 		match level:
-			1:
-				dirs = _get_blurred_dirs(d, 3)
-			2:
-				dirs = _get_blurred_dirs(d, 2)
-			3:
-				dirs = [d]
-			_:
-				dirs = [d]
+			1: dirs = _get_blurred_dirs(d, 3)
+			2: dirs = _get_blurred_dirs(d, 2)
+			3: dirs = [d]
+			_: dirs = [d]
 
 		var content = cell["content_type"]
 
-		# 1) Возвращаем для мгновенного отображения (как сейчас)
-		result.append({
-			"content": content,
-			"dirs": dirs
-		})
+		var entry = {"content": content, "dirs": dirs}
+		result.append(entry)
+		last_sense_result.append(entry)
 
-		# 2) Сохраняем именно РАЗМЫТУЮ информацию в память игрока
 		_store_observation(origin, sense_type, content, dirs)
 
 	return result
@@ -158,11 +154,12 @@ func resolve_current_cell() -> void:
 	var cell = world[player_pos]
 
 	if cell["content_type"] == "large_enemy" and not cell["resolved"]:
-		gsm.change_state("CombatState", {
+		cell["resolved"] = true
+
+		emit_signal("encounter_requested", {
 			"world_cell": player_pos,
 			"danger": cell["intensity"]
 		})
-		cell["resolved"] = true
 
 func _store_observation(origin: Vector2i, sense_type: String, content: String, dirs: Array) -> void:
 	# Если уже есть такая запись (тот же origin + sense + content) — обновим dirs
@@ -177,3 +174,7 @@ func _store_observation(origin: Vector2i, sense_type: String, content: String, d
 		"content": content,
 		"dirs": dirs
 	})
+	
+func clear_last_sense() -> void:
+	last_sense_type = ""
+	last_sense_result.clear()

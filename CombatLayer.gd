@@ -6,12 +6,12 @@ extends Node2D
 #ВСЕ ДЛЯ ЧЕГО НУЖНА ТА НОДА - ОТРИСОВКА ПЕРСОНАЖА ПО ПОЗИЦИЯМ ИЗ МЕНЕДЖЕРА
 var combat_manager: Node
 
-func _ready(): #находит ноду и скрипт комбат менеджера
+func _ready():
 	combat_manager = get_tree().get_first_node_in_group("combat_manager")
-
-func _process(_delta):
-	# чтобы обновлялось при каждом ходе без ручного queue_redraw()
-	queue_redraw() #пока происходит бой, отрисосывается каждую сек по новому
+	if combat_manager and combat_manager.changed:
+		if not combat_manager.changed.is_connected(queue_redraw):
+			combat_manager.changed.connect(queue_redraw)
+	queue_redraw()
 
 func _draw():
 	# Сетка

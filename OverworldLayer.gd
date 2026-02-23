@@ -1,46 +1,11 @@
 extends Node2D
 
 const CELL_SIZE := 64
-
 var overworld_manager: OverworldManager
-
-# Временный результат (мгновенная подсветка)
-var last_sense_result: Array = []
-var last_sense_type: String = ""
 
 func _ready():
 	overworld_manager = get_tree().get_first_node_in_group("overworld_manager")
 	queue_redraw()
-
-# ------------------------------------------------------------
-# INPUT (клавиши 1 / 2 / 3)
-# ------------------------------------------------------------
-
-func _input(event):
-	if overworld_manager == null:
-		return
-
-	if event is InputEventKey and event.pressed and not event.echo:
-		match event.keycode:
-			KEY_1:
-				last_sense_type = "hearing"
-				last_sense_result = overworld_manager.use_sense("hearing", 1)
-				queue_redraw()
-
-			KEY_2:
-				last_sense_type = "smell"
-				last_sense_result = overworld_manager.use_sense("smell", 1)
-				queue_redraw()
-
-			KEY_3:
-				last_sense_type = "echo"
-				last_sense_result = overworld_manager.use_sense("echo", 1)
-				queue_redraw()
-
-			KEY_0:
-				last_sense_result.clear()
-				last_sense_type = ""
-				queue_redraw()
 
 # ------------------------------------------------------------
 # DRAW
@@ -76,19 +41,19 @@ func _draw():
 	_draw_observations()
 
 	# --- Мгновенная подсветка текущего сенсора ---
-	_draw_current_sense(player_pos)
+	_draw_current_sense(player_pos, overworld_manager.last_sense_type, overworld_manager.last_sense_result)
 
 # ------------------------------------------------------------
 # ОТРИСОВКА ТЕКУЩЕГО СЕНСОРА
 # ------------------------------------------------------------
 
-func _draw_current_sense(player_pos: Vector2i):
-	if last_sense_result.is_empty():
+func _draw_current_sense(player_pos: Vector2i, sense_type: String, sense_result: Array):
+	if sense_result.is_empty():
 		return
 
 	var color := Color(0.2, 1.0, 0.2, 0.25)
 
-	match last_sense_type:
+	match sense_type:
 		"hearing":
 			color = Color(0.2, 0.6, 1.0, 0.35)
 		"smell":
@@ -96,13 +61,11 @@ func _draw_current_sense(player_pos: Vector2i):
 		"echo":
 			color = Color(1.0, 0.8, 0.2, 0.35)
 
-	for entry in last_sense_result:
+	for entry in sense_result:
 		if not entry.has("dirs"):
 			continue
 
-		var dirs: Array = entry["dirs"]
-
-		for dir in dirs:
+		for dir in entry["dirs"]:
 			if typeof(dir) != TYPE_VECTOR2I:
 				continue
 

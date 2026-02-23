@@ -10,12 +10,17 @@ func enter(_data := {}):
 	print("ENTER: Combat")
 	if overworld_layer: overworld_layer.visible = false
 	if combat_layer: combat_layer.visible = true
-	if combat_manager: combat_manager.start_combat(_data)
+	if combat_manager:
+		if not combat_manager.combat_finished.is_connected(_on_combat_finished):
+			combat_manager.combat_finished.connect(_on_combat_finished)
+		combat_manager.start_combat(_data)
 
 func exit():
 	print("EXIT: Combat")
+	
+func _on_combat_finished(result: Dictionary) -> void:
+	machine.change_state("ExplorationState", result)
 
 func handle_input(event: InputEvent):
-	# Для теста: нажми E чтобы вернуться в поиск
-	if event.is_action_pressed("to_exploration"):
-		machine.change_state("ExplorationState")
+	if combat_manager:
+		combat_manager.handle_player_input(event)
