@@ -12,6 +12,9 @@ func _ready():
 	if not Session.log_changed.is_connected(queue_redraw):
 		Session.log_changed.connect(queue_redraw)
 
+	if not Session.session_loaded.is_connected(queue_redraw):
+		Session.session_loaded.connect(queue_redraw)
+
 	queue_redraw()
 
 # ------------------------------------------------------------

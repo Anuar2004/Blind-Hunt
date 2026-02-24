@@ -27,6 +27,12 @@ func handle_input(event: InputEvent) -> void:
 	# --- Сенсы ---
 	if event is InputEventKey and event.pressed and not event.echo:
 		match event.keycode:
+			KEY_F5:
+				Session.save_game()
+				return
+			KEY_F9:
+				Session.load_game()
+				return
 			KEY_1:
 				overworld_manager.use_sense_by_skill("hearing")
 				return
