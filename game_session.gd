@@ -5,8 +5,8 @@ signal log_changed
 signal session_loaded
 
 # --- Player ---
-var player_hp_max: int = 3
-var player_hp: int = 3
+var player_hp_max: int = 200
+var player_hp: int = 200
 
 var skills := {
 	"hearing": 1,
