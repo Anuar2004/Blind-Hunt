@@ -12,9 +12,11 @@ func _ready():
 		if not combat_manager.changed.is_connected(queue_redraw):
 			combat_manager.changed.connect(queue_redraw)
 
-	if not Session.log_changed.is_connected(queue_redraw):
-		Session.log_changed.connect(queue_redraw)
+	queue_redraw()
 
+func _process(_delta: float) -> void:
+	var board_size := Vector2(w * cell_size, h * cell_size)
+	position = (get_viewport_rect().size - board_size) * 0.5
 	queue_redraw()
 
 func _draw():
@@ -29,6 +31,7 @@ func _draw():
 
 	# 1) Terrain (синий)
 	_draw_known_terrain()
+	_draw_known_scent()
 
 	# 2) Игрок
 	var ppos: Vector2i = combat_manager.player_grid_pos
@@ -41,8 +44,6 @@ func _draw():
 	# DEBUG: реальные враги
 	if combat_manager.debug_show_real_enemies:
 		_draw_real_enemies()
-
-	_draw_log_overlay()
 
 func _draw_known_terrain() -> void:
 	var terrain: Dictionary = combat_manager.terrain
@@ -64,6 +65,26 @@ func _draw_known_terrain() -> void:
 			# возвышенность — легче, обводкой (пока без механики)
 			draw_rect(r, Color(0.2, 0.4, 1.0, 0.18), true)
 			draw_rect(r.grow(-6), Color(0.2, 0.4, 1.0, 0.35), false, 2.0)
+
+func _draw_known_scent() -> void:
+	var scent: Dictionary = combat_manager.scent
+	var known: Dictionary = combat_manager.known_scent
+	if known.is_empty():
+		return
+
+	for p in known.keys():
+		var alpha := 0.22
+
+		if scent.has(p):
+			var entry: Dictionary = scent[p]
+			var kind := str(entry.get("kind", ""))
+			if kind == "blood":
+				var intensity = clamp(int(entry.get("intensity", 1)), 1, 5)
+				alpha = 0.18 + 0.08 * float(intensity)
+
+		var r := Rect2(Vector2(p.x * cell_size, p.y * cell_size), Vector2(cell_size, cell_size))
+		draw_rect(r, Color(1.0, 1.0, 0.2, alpha), true)
+		draw_rect(r.grow(-8), Color(1.0, 1.0, 0.2, min(alpha + 0.15, 0.55)), false, 2.0)
 
 func _draw_enemy_threat_union() -> void:
 	var blobs := combat_manager.enemy_candidates_by_enemy
@@ -90,25 +111,3 @@ func _draw_real_enemies() -> void:
 			Vector2(cell_size - 24, cell_size - 24)
 		)
 		draw_rect(rect, Color(1.0, 0.0, 0.0, 0.85), true)
-
-func _draw_log_overlay() -> void:
-	var font := ThemeDB.fallback_font
-	if font == null:
-		return
-
-	var lines_to_show := 8
-	var start = max(0, Session.log.size() - lines_to_show)
-
-	var x := 20.0
-	var y := 24.0
-	var line_h := 18.0
-
-	draw_rect(
-		Rect2(Vector2(x - 10.0, y - 18.0), Vector2(520.0, lines_to_show * line_h + 12.0)),
-		Color(0, 0, 0, 0.5),
-		true
-	)
-
-	for i in range(start, Session.log.size()):
-		draw_string(font, Vector2(x, y), Session.log[i])
-		y += line_h

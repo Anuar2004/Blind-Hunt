@@ -15,6 +15,7 @@ const DIRECTIONS := [
 var last_sense_result: Array = []
 var last_sense_type: String = ""
 
+
 func _ready():
 	randomize()
 	ensure_ring_with_minimum_senses(Session.player_pos)

@@ -9,9 +9,6 @@ func _ready():
 		if not overworld_manager.world_changed.is_connected(queue_redraw):
 			overworld_manager.world_changed.connect(queue_redraw)
 
-	if not Session.log_changed.is_connected(queue_redraw):
-		Session.log_changed.connect(queue_redraw)
-
 	if not Session.session_loaded.is_connected(queue_redraw):
 		Session.session_loaded.connect(queue_redraw)
 
@@ -39,20 +36,11 @@ func _draw():
 			1.5
 		)
 
-	# --- Игрок ---
-	var player_screen := Vector2(player_pos.x * CELL_SIZE, player_pos.y * CELL_SIZE)
-	draw_rect(
-		Rect2(player_screen + Vector2(8,8), Vector2(CELL_SIZE - 16, CELL_SIZE - 16)),
-		Color(0.2, 0.8, 1.0, 0.6),
-		true
-	)
-
 	# --- Память игрока (размытые наблюдения) ---
 	_draw_observations()
 
 	# --- Мгновенная подсветка текущего сенсора ---
 	_draw_current_sense(player_pos, overworld_manager.last_sense_type, overworld_manager.last_sense_result)
-	_draw_log_overlay()
 
 # ------------------------------------------------------------
 # ОТРИСОВКА ТЕКУЩЕГО СЕНСОРА
@@ -136,23 +124,3 @@ func _draw_observations():
 				14,
 				Color(1,1,1,0.9)
 			)
-
-func _draw_log_overlay() -> void:
-	var font := ThemeDB.fallback_font
-	if font == null:
-		return
-
-	var lines_to_show := 8
-	var start = max(0, Session.log.size() - lines_to_show)
-
-	var x := 20.0
-	var y := 24.0
-	var line_h := 18.0
-
-	# фон-панель
-	var h := lines_to_show * line_h + 12.0
-	draw_rect(Rect2(Vector2(x - 10.0, y - 18.0), Vector2(520.0, h)), Color(0, 0, 0, 0.5), true)
-
-	for i in range(start, Session.log.size()):
-		draw_string(font, Vector2(x, y), Session.log[i])
-		y += line_h

@@ -7,6 +7,8 @@
 [ext_resource type="Script" uid="uid://qtat6cg6m1bu" path="res://combat_layer.gd" id="5_3dxm6"]
 [ext_resource type="Script" uid="uid://dpfpq3c3sn75x" path="res://combat_manager.gd" id="5_fos0i"]
 [ext_resource type="Script" uid="uid://bhccyq2dkkmms" path="res://overworld_manager.gd" id="5_lgr22"]
+[ext_resource type="Script" uid="uid://c8pxop8wypjyp" path="res://player.gd" id="8_trn2v"]
+[ext_resource type="Script" uid="uid://d2rd4x37gl4r6" path="res://hud.gd" id="9_03owx"]
 
 [node name="Main" type="Node2D" unique_id=243155863]
 
@@ -26,11 +28,23 @@ script = ExtResource("4_cm0pq")
 [node name="OverworldManager" type="Node" parent="OverworldLayer" unique_id=1880996924 groups=["overworld_manager"]]
 script = ExtResource("5_lgr22")
 
-[node name="Camera2D" type="Camera2D" parent="OverworldLayer" unique_id=1161584044]
-
 [node name="CombatLayer" type="Node2D" parent="." unique_id=5795847 groups=["combat_layer"]]
 visible = false
 script = ExtResource("5_3dxm6")
 
 [node name="CombatManager" type="Node" parent="CombatLayer" unique_id=2017951912 groups=["combat_manager"]]
 script = ExtResource("5_fos0i")
+
+[node name="Player" type="Node2D" parent="." unique_id=685607562 groups=["player"]]
+script = ExtResource("8_trn2v")
+
+[node name="Camera2D" type="Camera2D" parent="Player" unique_id=1178851579]
+
+[node name="HUD" type="CanvasLayer" parent="." unique_id=1813988976]
+
+[node name="HUDRoot" type="Control" parent="HUD" unique_id=1252176703]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+script = ExtResource("9_03owx")

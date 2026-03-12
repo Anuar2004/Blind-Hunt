@@ -5,7 +5,7 @@ signal log_changed
 signal session_loaded
 
 # --- Player ---
-var player_hp_max: int = 200
+var player_max_hp: int = 200
 var player_hp: int = 200
 
 var skills := {
@@ -35,8 +35,8 @@ func new_game(new_seed: int = 0) -> void:
 
 	seed(seed_value)
 
-	player_hp_max = 3
-	player_hp = player_hp_max
+	player_max_hp = 3
+	player_hp = player_max_hp
 	skills = {"hearing": 1, "smell": 1, "echo": 1}
 
 	world.clear()
@@ -91,7 +91,7 @@ func to_dict() -> Dictionary:
 
 	return {
 		"seed_value": seed_value,
-		"player_hp_max": player_hp_max,
+		"player_max_hp": player_max_hp,
 		"player_hp": player_hp,
 		"skills": skills,
 		"player_pos": [player_pos.x, player_pos.y],
@@ -103,8 +103,8 @@ func to_dict() -> Dictionary:
 func from_dict(data: Dictionary) -> void:
 	# --- базовые параметры ---
 	seed_value = int(data.get("seed_value", 0))
-	player_hp_max = int(data.get("player_hp_max", 3))
-	player_hp = int(data.get("player_hp", player_hp_max))
+	player_max_hp = int(data.get("player_hp_max", 200))
+	player_hp = int(data.get("player_hp", player_max_hp))
 	skills = data.get("skills", {"hearing": 1, "smell": 1, "echo": 1})
 
 	# --- player_pos ---

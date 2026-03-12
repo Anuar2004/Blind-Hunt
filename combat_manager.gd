@@ -4,6 +4,8 @@ class_name CombatManager
 signal changed
 signal combat_finished(result: Dictionary)
 
+@onready var player := get_tree().get_first_node_in_group("player")
+
 const W := 8
 const H := 8
 const BASE_UNCERTAINTY_CELLS := 10
@@ -48,6 +50,14 @@ var debug_show_real_enemies := false
 # ------------------------------------------------------------
 var terrain: Dictionary = {}
 var known_terrain: Dictionary = {}
+
+# ------------------------------------------------------------
+# Smell layer (жёлтый)
+# scent[pos] = {"kind": "blood", "intensity": int}
+# known_scent[pos] = true
+# ------------------------------------------------------------
+var scent: Dictionary = {}
+var known_scent: Dictionary = {}
 
 # ------------------------------------------------------------
 # PUBLIC API (вызывается из CombatState)
@@ -100,6 +110,9 @@ func start_combat(encounter: Dictionary = {}) -> void:
 
 	# 1) Генерим ландшафт (пока игрок один на поле)
 	_generate_terrain(rng)
+	
+	scent.clear()
+	known_scent.clear()
 
 	# 2) Спавним врагов с учётом деревьев
 	_spawn_enemies(rng, danger)
@@ -163,11 +176,11 @@ func _use_combat_sense(sense_type: String) -> void:
 
 	match sense_type:
 		"touch":
-			# Touch сейчас = ландшафт (синий слой)
 			_reveal_terrain_by_touch(level)
-		"hearing", "smell":
-			# пока оставим их на угрозу (кляксы)
-			_apply_sense_to_all_enemies(sense_type, level)
+		"smell":
+			_reveal_scent_by_smell(level)
+		"hearing":
+			_apply_sense_to_all_enemies("hearing", level)
 		_:
 			_apply_sense_to_all_enemies(sense_type, level)
 
@@ -176,13 +189,12 @@ func _use_combat_sense(sense_type: String) -> void:
 func _reveal_terrain_by_touch(level: int) -> void:
 	last_combat_sense_type = "touch"
 
-	# радиус по уровню
-	var r := 2
+	var r := 1
 	match level:
-		1: r = 2
-		2: r = 3
-		3: r = 4
-		_: r = 4
+		1: r = 1
+		2: r = 2
+		3: r = 2
+		_: r = 2
 
 	for y in range(max(0, player_grid_pos.y - r), min(H, player_grid_pos.y + r + 1)):
 		for x in range(max(0, player_grid_pos.x - r), min(W, player_grid_pos.x + r + 1)):
@@ -190,7 +202,74 @@ func _reveal_terrain_by_touch(level: int) -> void:
 			if terrain.has(p):
 				known_terrain[p] = true
 
-	Session.add_log("Ты ощущаешь пространство вокруг. (радиус " + str(r) + ")")
+	Session.add_log("Ты ощупываешь пространство рядом. (радиус " + str(r) + ")")
+	
+func _reveal_scent_by_smell(level: int) -> void:
+	last_combat_sense_type = "smell"
+
+	if scent.is_empty():
+		Session.add_log("Нюх не уловил заметного следа.")
+		return
+
+	var best_pos := Vector2i.ZERO
+	var best_score := -999999
+	var found := false
+
+	for pos in scent.keys():
+		if typeof(pos) != TYPE_VECTOR2I:
+			continue
+
+		var entry: Dictionary = scent[pos]
+		var kind := str(entry.get("kind", ""))
+		if kind != "blood":
+			continue
+
+		var intensity := int(entry.get("intensity", 1))
+		var dist := int(player_grid_pos.distance_to(pos))
+		var score := intensity * 10 - dist
+
+		if not found or score > best_score:
+			found = true
+			best_score = score
+			best_pos = pos
+
+	if not found:
+		Session.add_log("Нюх не уловил крови.")
+		return
+
+	var trail_len := 2
+	match level:
+		1: trail_len = 2
+		2: trail_len = 3
+		3: trail_len = 4
+		_: trail_len = 4
+	
+	var trail := _build_smell_trail(player_grid_pos, best_pos, trail_len)
+	for p in trail:
+		known_scent[p] = true
+
+	Session.add_log("Нюх уловил след. (длина следа " + str(trail.size()) + ")")
+
+func _build_smell_trail(from: Vector2i, to: Vector2i, max_steps: int) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	var cur := from
+
+	for _i in range(max_steps):
+		if cur == to:
+			break
+
+		var step := _step_towards(cur, to)
+		if step == Vector2i.ZERO:
+			break
+
+		cur += step
+
+		if not _in_bounds(cur):
+			break
+
+		out.append(cur)
+
+	return out
 
 # ------------------------------------------------------------
 # SENSES -> threat blobs
@@ -220,9 +299,11 @@ func _apply_sense_to_all_enemies(sense_type: String, level: int) -> void:
 
 	match sense_type:
 		"hearing":
-			Session.add_log("Слух уточняет направление. (точность " + str(level) + ")")
+			Session.add_log("Слух сужает зону врагов по всей арене. (точность " + str(level) + ")")
 		"smell":
-			Session.add_log("Нюх уточняет положение. (точность " + str(level) + ")")
+			Session.add_log("Нюх помогает найти след.")
+		"touch":
+			Session.add_log("Осязание уточняет пространство рядом.")
 		_:
 			Session.add_log("Чувство уточняет позицию. (точность " + str(level) + ")")
 
@@ -232,22 +313,66 @@ func _get_candidates_for_sense_from_enemy(sense_type: String, level: int, enemy_
 	if real_dir == Vector2i.ZERO:
 		real_dir = Vector2i(1, 0)
 
-	var spread := 3
-	match level:
-		1: spread = 3
-		2: spread = 2
-		3: spread = 0
-		_: spread = 0
-
-	var dirs := _get_blurred_dirs(real_dir, spread)
-
 	match sense_type:
 		"hearing":
-			return _cone_from_dirs(player_grid_pos, dirs, 5)
-		"smell":
-			return _cone_from_dirs(player_grid_pos, dirs, 4)
+			var spread := 4
+			match level:
+				1: spread = 5
+				2: spread = 3
+				3: spread = 1
+				_: spread = 1
+
+			var dirs := _get_blurred_dirs(real_dir, spread)
+			return _whole_map_from_dirs(player_grid_pos, dirs)
+
+		"touch":
+			var r := 1
+			match level:
+				1: r = 1
+				2: r = 2
+				3: r = 2
+				_: r = 2
+
+			return _local_area_around_player(r)
+
 		_:
-			return _cone_from_dirs(player_grid_pos, dirs, 4)
+			var spread_other := 3
+			match level:
+				1: spread_other = 3
+				2: spread_other = 2
+				3: spread_other = 1
+				_: spread_other = 1
+
+			var dirs_other := _get_blurred_dirs(real_dir, spread_other)
+			return _whole_map_from_dirs(player_grid_pos, dirs_other)
+
+func _whole_map_from_dirs(origin: Vector2i, dirs: Array) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+
+	for y in range(H):
+		for x in range(W):
+			var p := Vector2i(x, y)
+			if p == origin:
+				continue
+
+			var dd := p - origin
+			var sd := Vector2i(sign(dd.x), sign(dd.y))
+			if dirs.has(sd):
+				out.append(p)
+
+	return out
+
+func _local_area_around_player(r: int) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+
+	for y in range(max(0, player_grid_pos.y - r), min(H, player_grid_pos.y + r + 1)):
+		for x in range(max(0, player_grid_pos.x - r), min(W, player_grid_pos.x + r + 1)):
+			var p := Vector2i(x, y)
+			if p == player_grid_pos:
+				continue
+			out.append(p)
+
+	return out
 
 func _cone_from_dirs(origin: Vector2i, dirs: Array, max_range: int) -> Array[Vector2i]:
 	var out: Array[Vector2i] = []
@@ -308,6 +433,7 @@ func _try_player_attack() -> void:
 		return
 
 	enemy_hps[target_idx] -= 1
+	_add_blood(enemy_positions[target_idx], 1)
 	Session.add_log("Ты попал по врагу!")
 
 	if enemy_hps[target_idx] <= 0:
@@ -325,6 +451,12 @@ func _try_player_attack() -> void:
 		enemy_grid_pos = enemy_positions[0]
 
 	_end_player_turn()
+
+func _add_blood(pos: Vector2i, amount: int = 1) -> void:
+	var entry = scent.get(pos, {"kind": "blood", "intensity": 0})
+	entry["kind"] = "blood"
+	entry["intensity"] = int(entry.get("intensity", 0)) + amount
+	scent[pos] = entry
 
 func _end_player_turn() -> void:
 	phase = Phase.ENEMY_TURN
@@ -359,9 +491,13 @@ func _enemy_turn() -> void:
 			any_moved = true
 
 	if hits > 0:
-		Session.player_hp -= hits
-		Session.add_log("Враги ударили тебя: -" + str(hits) + " HP.")
-		if Session.player_hp <= 0:
+		if player and player.has_method("take_damage"):
+			player.take_damage(hits)
+		else:
+			Session.player_hp = max(0, int(Session.player_hp) - hits)
+			Session.add_log("Враги ударили тебя: -" + str(hits) + " HP.")
+
+		if int(Session.player_hp) <= 0:
 			end_combat(false)
 			return
 	else:
