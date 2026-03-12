@@ -103,7 +103,7 @@ func to_dict() -> Dictionary:
 func from_dict(data: Dictionary) -> void:
 	# --- базовые параметры ---
 	seed_value = int(data.get("seed_value", 0))
-	player_max_hp = int(data.get("player_hp_max", 200))
+	player_max_hp = int(data.get("player_max_hp", 200))
 	player_hp = int(data.get("player_hp", player_max_hp))
 	skills = data.get("skills", {"hearing": 1, "smell": 1, "echo": 1})
 

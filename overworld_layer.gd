@@ -115,12 +115,13 @@ func _draw_observations():
 
 			# Временно текст (для отладки)
 			var font := ThemeDB.fallback_font
-			draw_string(
-				font,
-				sp + Vector2(6, CELL_SIZE * 0.6),
-				content,
-				HORIZONTAL_ALIGNMENT_LEFT,
-				CELL_SIZE - 12,
-				14,
-				Color(1,1,1,0.9)
-			)
+			if font != null:
+				draw_string(
+					font,
+					sp + Vector2(6, CELL_SIZE * 0.6),
+					content,
+					HORIZONTAL_ALIGNMENT_LEFT,
+					CELL_SIZE - 12,
+					14,
+					Color(1,1,1,0.9)
+				)

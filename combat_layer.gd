@@ -17,7 +17,6 @@ func _ready():
 func _process(_delta: float) -> void:
 	var board_size := Vector2(w * cell_size, h * cell_size)
 	position = (get_viewport_rect().size - board_size) * 0.5
-	queue_redraw()
 
 func _draw():
 	# Сетка
