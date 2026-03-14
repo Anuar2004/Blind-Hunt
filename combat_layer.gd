@@ -90,17 +90,14 @@ func _draw_enemy_threat_union() -> void:
 	if blobs.is_empty():
 		return
 
-	# Единая красная зона угрозы (без "подсказки" количеством врагов)
-	var union_set := {}
 	for blob in blobs:
 		for p in blob:
-			if typeof(p) == TYPE_VECTOR2I:
-				union_set[p] = true
+			if typeof(p) != TYPE_VECTOR2I:
+				continue
 
-	var color := Color(1.0, 0.2, 0.2, 0.20)
-	for p in union_set.keys():
-		var r := Rect2(Vector2(p.x * cell_size, p.y * cell_size), Vector2(cell_size, cell_size))
-		draw_rect(r, color, true)
+			var r := Rect2(Vector2(p.x * cell_size, p.y * cell_size), Vector2(cell_size, cell_size))
+			draw_rect(r, Color(1.0, 0.2, 0.2, 0.20), true)
+			draw_rect(r.grow(-6), Color(1.0, 0.2, 0.2, 0.10), false, 1.0) 
 
 func _draw_real_enemies() -> void:
 	for i in range(combat_manager.enemy_positions.size()):

@@ -40,6 +40,7 @@ var _hp_at_start: int = 0
 # Fog-of-war: отдельные кляксы по врагам
 # ------------------------------------------------------------
 var enemy_candidates_by_enemy: Array[Array] = [] # Array[Array[Vector2i]]
+var hidden_hearing_blobs_by_enemy: Array[Array] = [] # реальные скрытые зоны по врагам
 var last_combat_sense_type: String = ""
 var debug_show_real_enemies := false
 
@@ -129,15 +130,27 @@ func start_combat(encounter: Dictionary = {}) -> void:
 		_:
 			enemy_hp = 2 + danger
 
-	# 3) Инициализируем кляксы врагов
-	_reset_all_enemy_candidates_with_rng(rng)
+	enemy_candidates_by_enemy.clear()
+	hidden_hearing_blobs_by_enemy.clear()
 
-	# 4) В начале боя автоматически "ощутим" ландшафт touch-ом
+	for enemy_pos in enemy_positions:
+		enemy_candidates_by_enemy.append([])
+
+		var hidden_blob := _make_hidden_hearing_blob(enemy_pos, rng)
+		hidden_hearing_blobs_by_enemy.append(hidden_blob)
+
+	# 4) В начале боя автоматически "ощутим" только ближайший ландшафт
 	var touch_level := int(Session.skills.get("touch", Session.skills.get("echo", 1)))
 	_reveal_terrain_by_touch(touch_level)
 
 	Session.add_log("Начался бой.")
 	emit_signal("changed")
+
+func _make_hidden_hearing_blob(enemy_pos: Vector2i, rng: RandomNumberGenerator) -> Array[Vector2i]:
+	var target_size := rng.randi_range(10, 13)
+	var blob: Array[Vector2i] = _sample_uncertainty_area(enemy_pos, target_size, rng)
+	blob = _keep_only_connected_from_center(enemy_pos, blob)
+	return blob
 
 func end_combat(victory: bool) -> void:
 	active = false
@@ -277,90 +290,47 @@ func _build_smell_trail(from: Vector2i, to: Vector2i, max_steps: int) -> Array[V
 func _apply_sense_to_all_enemies(sense_type: String, level: int) -> void:
 	last_combat_sense_type = sense_type
 
+	if sense_type != "hearing":
+		match sense_type:
+			"smell":
+				Session.add_log("Нюх помогает найти след.")
+			"touch":
+				Session.add_log("Осязание уточняет пространство рядом.")
+			_:
+				Session.add_log("Чувство ничего не сообщило о зонах врагов.")
+		return
+
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+
 	for i in range(enemy_positions.size()):
 		if i >= enemy_candidates_by_enemy.size():
 			continue
+		if i >= hidden_hearing_blobs_by_enemy.size():
+			continue
 
-		var sense_candidates_for_enemy: Array[Vector2i] = _get_candidates_for_sense_from_enemy(
-			sense_type, level, enemy_positions[i]
-		)
+		var enemy_pos: Vector2i = enemy_positions[i]
+		var visible_blob: Array = enemy_candidates_by_enemy[i]
+		var hidden_blob: Array = hidden_hearing_blobs_by_enemy[i]
 
-		var old_blob: Array = enemy_candidates_by_enemy[i]
-		var filtered: Array[Vector2i] = []
-		for p in old_blob:
-			if sense_candidates_for_enemy.has(p):
-				filtered.append(p)
+		# Первый hearing — просто показываем скрытую зону
+		if visible_blob.is_empty():
+			enemy_candidates_by_enemy[i] = hidden_blob.duplicate()
+			continue
 
-		filtered = _keep_only_connected_from_center(enemy_positions[i], filtered)
-		if not filtered.has(enemy_positions[i]):
-			filtered.append(enemy_positions[i])
+		# Следующий hearing — новая зона на 1 клетку меньше, но всё ещё не точная
+		var next_size = max(2, visible_blob.size() - 1)
+		var next_blob := _sample_uncertainty_area(enemy_pos, next_size, rng)
+		next_blob = _keep_only_connected_from_center(enemy_pos, next_blob)
 
-		enemy_candidates_by_enemy[i] = filtered
+		# не даём схлопнуться в точную клетку слишком рано
+		if next_blob.size() < 2:
+			next_blob = visible_blob
 
-	match sense_type:
-		"hearing":
-			Session.add_log("Слух сужает зону врагов по всей арене. (точность " + str(level) + ")")
-		"smell":
-			Session.add_log("Нюх помогает найти след.")
-		"touch":
-			Session.add_log("Осязание уточняет пространство рядом.")
-		_:
-			Session.add_log("Чувство уточняет позицию. (точность " + str(level) + ")")
+		enemy_candidates_by_enemy[i] = next_blob
+		hidden_hearing_blobs_by_enemy[i] = next_blob.duplicate()
 
-func _get_candidates_for_sense_from_enemy(sense_type: String, level: int, enemy_pos: Vector2i) -> Array[Vector2i]:
-	var delta := enemy_pos - player_grid_pos
-	var real_dir := Vector2i(sign(delta.x), sign(delta.y))
-	if real_dir == Vector2i.ZERO:
-		real_dir = Vector2i(1, 0)
-
-	match sense_type:
-		"hearing":
-			var spread := 4
-			match level:
-				1: spread = 5
-				2: spread = 3
-				3: spread = 1
-				_: spread = 1
-
-			var dirs := _get_blurred_dirs(real_dir, spread)
-			return _whole_map_from_dirs(player_grid_pos, dirs)
-
-		"touch":
-			var r := 1
-			match level:
-				1: r = 1
-				2: r = 2
-				3: r = 2
-				_: r = 2
-
-			return _local_area_around_player(r)
-
-		_:
-			var spread_other := 3
-			match level:
-				1: spread_other = 3
-				2: spread_other = 2
-				3: spread_other = 1
-				_: spread_other = 1
-
-			var dirs_other := _get_blurred_dirs(real_dir, spread_other)
-			return _whole_map_from_dirs(player_grid_pos, dirs_other)
-
-func _whole_map_from_dirs(origin: Vector2i, dirs: Array) -> Array[Vector2i]:
-	var out: Array[Vector2i] = []
-
-	for y in range(H):
-		for x in range(W):
-			var p := Vector2i(x, y)
-			if p == origin:
-				continue
-
-			var dd := p - origin
-			var sd := Vector2i(sign(dd.x), sign(dd.y))
-			if dirs.has(sd):
-				out.append(p)
-
-	return out
+	Session.add_log("Слух сужает текущие зоны врагов.")
 
 func _local_area_around_player(r: int) -> Array[Vector2i]:
 	var out: Array[Vector2i] = []
@@ -372,23 +342,6 @@ func _local_area_around_player(r: int) -> Array[Vector2i]:
 				continue
 			out.append(p)
 
-	return out
-
-func _cone_from_dirs(origin: Vector2i, dirs: Array, max_range: int) -> Array[Vector2i]:
-	var out: Array[Vector2i] = []
-	for d in dirs:
-		for y in range(H):
-			for x in range(W):
-				var p := Vector2i(x, y)
-				if p == origin:
-					continue
-				if origin.distance_to(p) > float(max_range):
-					continue
-
-				var dd := p - origin
-				var sd := Vector2i(sign(dd.x), sign(dd.y))
-				if sd == d:
-					out.append(p)
 	return out
 
 func _get_blurred_dirs(real_dir: Vector2i, spread: int) -> Array:
@@ -467,7 +420,6 @@ func _enemy_turn() -> void:
 		return
 
 	var hits := 0
-	var any_moved := false
 
 	for i in range(enemy_positions.size()):
 		var epos := enemy_positions[i]
@@ -488,7 +440,6 @@ func _enemy_turn() -> void:
 
 		if _in_bounds(np) and (not _is_blocked(np)) and (not enemy_positions.has(np)) and np != player_grid_pos:
 			enemy_positions[i] = np
-			any_moved = true
 
 	if hits > 0:
 		if player and player.has_method("take_damage"):
@@ -508,15 +459,7 @@ func _enemy_turn() -> void:
 
 	phase = Phase.PLAYER_TURN
 
-	if any_moved:
-		_expand_uncertainty()
-
 	emit_signal("changed")
-
-func _expand_uncertainty() -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.randomize()
-	_reset_all_enemy_candidates_with_rng(rng)
 
 # ------------------------------------------------------------
 # TERRAIN
