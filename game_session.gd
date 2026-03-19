@@ -17,7 +17,8 @@ var skills := {
 # --- Overworld ---
 var world: Dictionary = {}         # Vector2i -> cell dict
 var player_pos: Vector2i = Vector2i.ZERO
-var observations: Array = []       # blurred memory entries
+var observations: Array = []       # sensory memory entries
+var exploration_turn_phase: String = "sense"   # "sense" | "move"
 
 # Seed (опционально)
 var seed_value: int = 0
@@ -42,6 +43,7 @@ func new_game(new_seed: int = 0) -> void:
 	world.clear()
 	observations.clear()
 	player_pos = Vector2i.ZERO
+	exploration_turn_phase = "sense"
 
 	log.clear()
 	emit_signal("log_changed")
@@ -52,42 +54,39 @@ func add_log(msg: String) -> void:
 		log.pop_front()
 	emit_signal("log_changed")
 
-func _vec2i_to_str(v: Vector2i) -> String:
-	return str(v.x) + "," + str(v.y)
-
-func _str_to_vec2i(s: String) -> Vector2i:
-	var parts := s.split(",")
-	return Vector2i(int(parts[0]), int(parts[1]))
-
 func to_dict() -> Dictionary:
-	# --- world ---
-	# Dictionary<Vector2i, Dictionary> -> Array
 	var world_list: Array = []
-
 	for pos in world.keys():
 		var cell: Dictionary = world[pos]
-
 		world_list.append({
 			"pos": [pos.x, pos.y],
 			"cell": cell
 		})
 
-	# --- observations ---
 	var obs_list: Array = []
-
 	for obs in observations:
-		var origin: Vector2i = obs["origin"]
+		var entry: Dictionary = {
+			"sense_type": obs.get("sense_type", ""),
+			"kind": obs.get("kind", ""),
+			"content": obs.get("content", ""),
+			"text": obs.get("text", "")
+		}
 
-		var dirs_serialized: Array = []
-		for d in obs["dirs"]:
-			dirs_serialized.append([d.x, d.y])
+		var source_pos: Vector2i = obs.get("source_pos", Vector2i.ZERO)
+		entry["source_pos"] = [source_pos.x, source_pos.y]
 
-		obs_list.append({
-			"origin": [origin.x, origin.y],
-			"sense_type": obs["sense_type"],
-			"content": obs["content"],
-			"dirs": dirs_serialized
-		})
+		if obs.has("shape"):
+			entry["shape"] = obs.get("shape", "")
+		if obs.has("intensity"):
+			entry["intensity"] = int(obs.get("intensity", 1))
+
+		var trail_cells: Array = []
+		for p in obs.get("trail_cells", []):
+			if typeof(p) == TYPE_VECTOR2I:
+				trail_cells.append([p.x, p.y])
+		entry["trail_cells"] = trail_cells
+
+		obs_list.append(entry)
 
 	return {
 		"seed_value": seed_value,
@@ -97,56 +96,62 @@ func to_dict() -> Dictionary:
 		"player_pos": [player_pos.x, player_pos.y],
 		"world_list": world_list,
 		"observations": obs_list,
+		"exploration_turn_phase": exploration_turn_phase,
 		"log": log
 	}
 
 func from_dict(data: Dictionary) -> void:
-	# --- базовые параметры ---
 	seed_value = int(data.get("seed_value", 0))
 	player_max_hp = int(data.get("player_max_hp", 200))
 	player_hp = int(data.get("player_hp", player_max_hp))
 	skills = data.get("skills", {"hearing": 1, "smell": 1, "echo": 1})
 
-	# --- player_pos ---
 	var pp = data.get("player_pos", [0, 0])
 	player_pos = Vector2i(int(pp[0]), int(pp[1]))
 
-	# --- world ---
-	world.clear()
+	exploration_turn_phase = str(data.get("exploration_turn_phase", "sense"))
+	if exploration_turn_phase != "sense" and exploration_turn_phase != "move":
+		exploration_turn_phase = "sense"
 
+	world.clear()
 	var world_list: Array = data.get("world_list", [])
 	if world_list is Array:
 		for entry in world_list:
 			var p = entry.get("pos", [0, 0])
 			var pos := Vector2i(int(p[0]), int(p[1]))
-
 			var cell: Dictionary = entry.get("cell", {})
 			world[pos] = cell
 
-	# --- observations ---
 	observations.clear()
-
 	var raw_obs = data.get("observations", [])
 	if raw_obs is Array:
 		for obs in raw_obs:
-			var origin_arr = obs.get("origin", [0, 0])
-			var origin := Vector2i(int(origin_arr[0]), int(origin_arr[1]))
-
-			var dirs_arr: Array = obs.get("dirs", [])
-			var dirs: Array = []
-			for d in dirs_arr:
-				dirs.append(Vector2i(int(d[0]), int(d[1])))
-
-			observations.append({
-				"origin": origin,
-				"sense_type": obs.get("sense_type", ""),
+			var sense_type := str(obs.get("sense_type", ""))
+			var kind := str(obs.get("kind", ""))
+			var entry := {
+				"sense_type": sense_type,
+				"kind": kind,
 				"content": obs.get("content", ""),
-				"dirs": dirs
-			})
+				"text": obs.get("text", "")
+			}
 
-	# --- log (Array[String] безопасно) ---
+			var source_arr = obs.get("source_pos", [0, 0])
+			entry["source_pos"] = Vector2i(int(source_arr[0]), int(source_arr[1]))
+
+			if obs.has("shape"):
+				entry["shape"] = obs.get("shape", "")
+			if obs.has("intensity"):
+				entry["intensity"] = int(obs.get("intensity", 1))
+
+			var trail_cells: Array = []
+			for p in obs.get("trail_cells", []):
+				trail_cells.append(Vector2i(int(p[0]), int(p[1])))
+			entry["trail_cells"] = trail_cells
+
+			if sense_type != "" and kind != "":
+				observations.append(entry)
+
 	log.clear()
-
 	var raw_log = data.get("log", [])
 	if raw_log is Array:
 		for entry in raw_log:

@@ -62,7 +62,7 @@ func _draw_top_left_status(font) -> void:
 
 	# Mode panel
 	var mode_panel_pos := hp_panel_pos + Vector2(0, 68)
-	var mode_panel_size := Vector2(280, 38)
+	var mode_panel_size := Vector2(280, 58)
 	_draw_panel(mode_panel_pos, mode_panel_size)
 
 	draw_string(
@@ -74,6 +74,17 @@ func _draw_top_left_status(font) -> void:
 		16,
 		TEXT_COLOR
 	)
+
+	if not _is_combat():
+		draw_string(
+			font,
+			mode_panel_pos + Vector2(10, 44),
+			_get_exploration_phase_text(),
+			HORIZONTAL_ALIGNMENT_LEFT,
+			-1,
+			15,
+			MUTED_TEXT
+		)
 
 	# Skills panel
 	var skills_panel_pos := mode_panel_pos + Vector2(0, 50)
@@ -183,6 +194,16 @@ func _get_pretty_state_name() -> String:
 func _is_combat() -> bool:
 	return _get_state_name() == "CombatState"
 
+func _get_exploration_phase_text() -> String:
+	var phase = Session.get("exploration_turn_phase")
+	match phase:
+		"sense":
+			return "Turn: Use a sense"
+		"move":
+			return "Turn: Move"
+		_:
+			return "Turn: Use a sense"
+
 func _get_control_lines() -> Array[String]:
 	if _is_combat():
 		return [
@@ -195,10 +216,11 @@ func _get_control_lines() -> Array[String]:
 		]
 
 	return [
-		"Arrows  Move",
+		"Turn loop: 1 sense -> 1 move",
 		"1       Hearing",
 		"2       Smell",
 		"3       Echo",
+		"Arrows  Move after sensing",
 		"0       Clear last sense",
 		"F5/F9   Save / Load"
 	]

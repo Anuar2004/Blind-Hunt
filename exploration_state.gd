@@ -20,6 +20,9 @@ func enter(_data := {}):
 	if typeof(_data) == TYPE_DICTIONARY and (_data.has("encounter_id") or _data.has("victory")):
 		_apply_combat_result(_data)
 
+	if Session.exploration_turn_phase != "sense" and Session.exploration_turn_phase != "move":
+		Session.exploration_turn_phase = "sense"
+
 	if overworld_manager and not overworld_manager.encounter_requested.is_connected(_on_encounter_requested):
 		overworld_manager.encounter_requested.connect(_on_encounter_requested)
 
