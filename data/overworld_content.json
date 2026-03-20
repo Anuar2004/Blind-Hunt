@@ -1,0 +1,162 @@
+{
+  "content_types": {
+    "fungus_patch": {
+      "name": "грибная рассада",
+      "signals": {
+        "smell": {
+          "brief": "землистый запах",
+          "mid": "грибной запах",
+          "detail": "густой грибной запах влажной рассады"
+        },
+        "echo": {
+          "shape": "roots",
+          "brief": "низкий силуэт",
+          "mid": "переплетение корней",
+          "detail": "низкий силуэт с корневой сеткой"
+        }
+      },
+      "echo_reaction": "none"
+    },
+    "traders": {
+      "name": "группа торговцев",
+      "signals": {
+        "sound": {
+          "brief": "голоса",
+          "mid": "разговор нескольких людей",
+          "detail": "несколько людей переговариваются и переступают с ноги на ногу"
+        },
+        "echo": {
+          "shape": "human",
+          "brief": "высокий силуэт",
+          "mid": "человеческий силуэт",
+          "detail": "несколько человеческих силуэтов и лёгкие шаги по земле"
+        }
+      },
+      "echo_reaction": "flee"
+    },
+    "wolf_pack": {
+      "name": "стаю волков",
+      "signals": {
+        "sound": {
+          "brief": "рычание",
+          "mid": "короткие рыки и быстрые шаги",
+          "detail": "несколько зверей рычат и кружат неподалёку"
+        },
+        "smell": {
+          "brief": "звериный запах",
+          "mid": "хищный запах",
+          "detail": "резкий звериный запах стаи хищников"
+        },
+        "echo": {
+          "shape": "beast",
+          "brief": "низкий силуэт",
+          "mid": "несколько звериных силуэтов",
+          "detail": "несколько приземистых силуэтов, быстро меняющих положение"
+        }
+      },
+      "echo_reaction": "investigate",
+      "encounter_pack": "dogs"
+    },
+    "large_enemy": {
+      "name": "крупного монстра",
+      "signals": {
+        "sound": {
+          "brief": "тяжёлые шаги",
+          "mid": "тяжёлые шаги и скрежет",
+          "detail": "что-то большое и тяжёлое ломает под собой землю"
+        },
+        "smell": {
+          "brief": "тяжёлый запах",
+          "mid": "хищный запах",
+          "detail": "густой хищный запах крупного зверя"
+        },
+        "echo": {
+          "shape": "hulking",
+          "brief": "массивный силуэт",
+          "mid": "крупный силуэт",
+          "detail": "массивный силуэт, занимающий почти всю клетку"
+        }
+      },
+      "echo_reaction": "aggressive",
+      "encounter_pack": "large_enemy"
+    },
+    "campfire": {
+      "name": "потухающий костёр",
+      "signals": {
+        "sound": {
+          "brief": "потрескивание",
+          "mid": "тихое потрескивание углей",
+          "detail": "где-то рядом сухо потрескивают угли"
+        },
+        "smell": {
+          "brief": "дым",
+          "mid": "дым и гарь",
+          "detail": "тянет дымом, золой и прогоревшим деревом"
+        },
+        "echo": {
+          "shape": "low",
+          "brief": "низкий силуэт",
+          "mid": "низкая преграда",
+          "detail": "низкий круглый силуэт вокруг углей"
+        }
+      },
+      "echo_reaction": "none"
+    },
+    "blood_stain": {
+      "name": "след крови",
+      "signals": {
+        "smell": {
+          "brief": "кровь",
+          "mid": "свежая кровь",
+          "detail": "сильный запах свежей крови"
+        },
+        "echo": {
+          "shape": "tracks",
+          "brief": "смазанный след",
+          "mid": "рваный след на земле",
+          "detail": "смазанный рельеф и сорванный верхний слой земли"
+        }
+      },
+      "echo_reaction": "none"
+    },
+    "pit": {
+      "name": "яму",
+      "signals": {
+        "echo": {
+          "shape": "pit",
+          "brief": "пустой провал",
+          "mid": "углубление в земле",
+          "detail": "резкий провал рельефа с пустым центром"
+        }
+      },
+      "echo_reaction": "none"
+    },
+    "ruins": {
+      "name": "развалины",
+      "signals": {
+        "echo": {
+          "shape": "wall",
+          "brief": "высокий контур",
+          "mid": "жёсткая преграда",
+          "detail": "ровный высокий силуэт, похожий на стену или камень"
+        }
+      },
+      "echo_reaction": "none"
+    }
+  },
+  "spawn_table": [
+    { "type": "fungus_patch", "weight": 16 },
+    { "type": "traders", "weight": 14 },
+    { "type": "wolf_pack", "weight": 14 },
+    { "type": "large_enemy", "weight": 10 },
+    { "type": "campfire", "weight": 15 },
+    { "type": "blood_stain", "weight": 13 },
+    { "type": "pit", "weight": 10 },
+    { "type": "ruins", "weight": 8 }
+  ],
+  "signal_spawn_table": {
+    "sound": ["traders", "wolf_pack", "large_enemy", "campfire"],
+    "smell": ["fungus_patch", "blood_stain", "wolf_pack", "large_enemy", "campfire"],
+    "echo": ["ruins", "pit", "traders", "wolf_pack", "campfire", "fungus_patch"]
+  }
+}

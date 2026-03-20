@@ -5,6 +5,7 @@ signal encounter_requested(data: Dictionary)
 signal world_changed
 
 const CELL_SIZE := 64
+const CONTENT_DB_PATH := "res://data/overworld_content.json"
 
 const DIRECTIONS := [
 	Vector2i(-1,-1), Vector2i(0,-1), Vector2i(1,-1),
@@ -19,11 +20,119 @@ const SIGNAL_ECHO := "echo"
 var last_sense_result: Array = []
 var last_sense_type: String = ""
 
+var content_db: Dictionary = {}
+var spawn_table: Array = []
+var signal_spawn_table: Dictionary = {}
+
 
 func _ready():
 	randomize()
+	_load_content_db()
 	_normalize_existing_world()
 	ensure_ring_with_minimum_signals(Session.player_pos)
+
+# ------------------------------------------------------------
+# CONTENT DB
+# ------------------------------------------------------------
+
+func _load_content_db() -> void:
+	content_db.clear()
+	spawn_table.clear()
+	signal_spawn_table.clear()
+
+	if not FileAccess.file_exists(CONTENT_DB_PATH):
+		push_warning("Content DB not found: " + CONTENT_DB_PATH + ". Using built-in fallback content.")
+		return
+
+	var file := FileAccess.open(CONTENT_DB_PATH, FileAccess.READ)
+	if file == null:
+		push_warning("Cannot open content DB: " + CONTENT_DB_PATH + ". Using built-in fallback content.")
+		return
+
+	var text := file.get_as_text()
+	file.close()
+
+	var parsed = JSON.parse_string(text)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		push_warning("Invalid content DB JSON: " + CONTENT_DB_PATH + ". Using built-in fallback content.")
+		return
+
+	var root: Dictionary = parsed
+
+	# Поддержка двух форматов:
+	# 1) { "content_types": {...}, "spawn_table": [...], "signal_spawn_table": {...} }
+	# 2) { "fungus_patch": {...}, "traders": {...}, ... }
+	if root.has("content_types"):
+		var content_types = root.get("content_types", {})
+		if content_types is Dictionary:
+			content_db = (content_types as Dictionary).duplicate(true)
+
+		var raw_spawn = root.get("spawn_table", [])
+		if raw_spawn is Array:
+			spawn_table = (raw_spawn as Array).duplicate(true)
+
+		var raw_signal_table = root.get("signal_spawn_table", {})
+		if raw_signal_table is Dictionary:
+			signal_spawn_table = (raw_signal_table as Dictionary).duplicate(true)
+	else:
+		content_db = root.duplicate(true)
+
+	_build_default_spawn_tables_if_needed()
+
+func _build_default_spawn_tables_if_needed() -> void:
+	if spawn_table.is_empty():
+		spawn_table = [
+			{"type": "fungus_patch", "weight": 16},
+			{"type": "traders", "weight": 14},
+			{"type": "wolf_pack", "weight": 14},
+			{"type": "large_enemy", "weight": 10},
+			{"type": "campfire", "weight": 15},
+			{"type": "blood_stain", "weight": 13},
+			{"type": "pit", "weight": 10},
+			{"type": "ruins", "weight": 8}
+		]
+
+	if signal_spawn_table.is_empty():
+		signal_spawn_table = {
+			SIGNAL_SOUND: ["traders", "wolf_pack", "large_enemy", "campfire"],
+			SIGNAL_SMELL: ["fungus_patch", "blood_stain", "wolf_pack", "large_enemy", "campfire"],
+			SIGNAL_ECHO: ["ruins", "pit", "traders", "wolf_pack", "campfire", "fungus_patch"]
+		}
+
+func _get_content_payload(content_type: String) -> Dictionary:
+	if content_db.has(content_type):
+		var data = content_db[content_type]
+		if data is Dictionary:
+			return (data as Dictionary).duplicate(true)
+
+	return _make_fallback_content_data(content_type)
+
+func _pick_weighted_content_type(table: Array) -> String:
+	var total_weight := 0
+
+	for entry in table:
+		if entry is Dictionary:
+			total_weight += max(0, int(entry.get("weight", 0)))
+
+	if total_weight <= 0:
+		return "ruins"
+
+	var roll := randi() % total_weight
+	var acc := 0
+
+	for entry in table:
+		if not (entry is Dictionary):
+			continue
+
+		var weight = max(0, int(entry.get("weight", 0)))
+		if weight <= 0:
+			continue
+
+		acc += weight
+		if roll < acc:
+			return str(entry.get("type", "ruins"))
+
+	return "ruins"
 
 # ------------------------------------------------------------
 # ДВИЖЕНИЕ
@@ -82,6 +191,7 @@ func ensure_ring_with_minimum_signals(center: Vector2i) -> void:
 	for signal_name in missing.keys():
 		if not missing[signal_name]:
 			continue
+
 		for pos in new_positions:
 			var candidate: Dictionary = Session.world[pos]
 			if _cell_has_signal(candidate, signal_name):
@@ -174,7 +284,7 @@ func _upgrade_legacy_content_type(cell: Dictionary) -> String:
 
 func _mark_signals_present(cell: Dictionary, missing: Dictionary) -> void:
 	for signal_name in [SIGNAL_SOUND, SIGNAL_SMELL, SIGNAL_ECHO]:
-		if missing.get(signal_name, false) and _cell_has_signal(cell, signal_name):
+		if bool(missing.get(signal_name, false)) and _cell_has_signal(cell, signal_name):
 			missing[signal_name] = false
 
 func _apply_content_type(cell: Dictionary, content_type: String) -> void:
@@ -182,35 +292,28 @@ func _apply_content_type(cell: Dictionary, content_type: String) -> void:
 	cell["content"] = _make_content_data(content_type)
 
 func _random_content_type() -> String:
-	var roll := randi() % 100
-	if roll < 16:
-		return "fungus_patch"
-	elif roll < 30:
-		return "traders"
-	elif roll < 44:
-		return "wolf_pack"
-	elif roll < 54:
-		return "large_enemy"
-	elif roll < 69:
-		return "campfire"
-	elif roll < 82:
-		return "blood_stain"
-	elif roll < 92:
-		return "pit"
-	return "ruins"
+	return _pick_weighted_content_type(spawn_table)
 
 func _random_content_type_for_signal(signal_name: String) -> String:
-	match signal_name:
-		SIGNAL_SOUND:
-			return ["traders", "wolf_pack", "large_enemy", "campfire"].pick_random()
-		SIGNAL_SMELL:
-			return ["fungus_patch", "blood_stain", "wolf_pack", "large_enemy", "campfire"].pick_random()
-		SIGNAL_ECHO:
-			return ["ruins", "pit", "traders", "wolf_pack", "campfire", "fungus_patch"].pick_random()
-		_:
-			return _random_content_type()
+	if signal_spawn_table.has(signal_name):
+		var candidates = signal_spawn_table[signal_name]
+		if candidates is Array and not (candidates as Array).is_empty():
+			return str((candidates as Array).pick_random())
+	return _random_content_type()
 
 func _make_content_data(content_type: String) -> Dictionary:
+	var data := _get_content_payload(content_type)
+
+	if not data.has("name"):
+		data["name"] = content_type
+	if not data.has("signals"):
+		data["signals"] = {}
+	if not data.has("echo_reaction"):
+		data["echo_reaction"] = "none"
+
+	return data
+
+func _make_fallback_content_data(content_type: String) -> Dictionary:
 	match content_type:
 		"fungus_patch":
 			return {
@@ -613,7 +716,7 @@ func resolve_current_cell() -> void:
 	_normalize_cell(cell)
 
 	var encounter_pack := str(cell.get("content", {}).get("encounter_pack", ""))
-	if encounter_pack != "" and not cell.get("resolved", false):
+	if encounter_pack != "" and not bool(cell.get("resolved", false)):
 		cell["resolved"] = true
 		Session.add_log("Опасность совсем рядом!")
 
