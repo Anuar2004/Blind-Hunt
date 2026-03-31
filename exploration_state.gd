@@ -29,39 +29,8 @@ func enter(_data := {}):
 func exit():
 	print("EXIT: Exploration")
 
-func handle_input(event: InputEvent) -> void:
-	if overworld_manager == null:
-		return
-
-	if event is InputEventKey and event.pressed and not event.echo:
-		match event.keycode:
-			KEY_F5:
-				Session.save_game()
-				return
-			KEY_F9:
-				Session.load_game()
-				return
-			KEY_1:
-				overworld_manager.use_sense_by_skill("hearing")
-				return
-			KEY_2:
-				overworld_manager.use_sense_by_skill("smell")
-				return
-			KEY_3:
-				overworld_manager.use_sense_by_skill("echo")
-				return
-			KEY_0:
-				overworld_manager.clear_last_sense()
-				return
-
-	if event.is_action_pressed("ui_up"):
-		overworld_manager.try_move(Vector2i(0, -1))
-	elif event.is_action_pressed("ui_down"):
-		overworld_manager.try_move(Vector2i(0, 1))
-	elif event.is_action_pressed("ui_left"):
-		overworld_manager.try_move(Vector2i(-1, 0))
-	elif event.is_action_pressed("ui_right"):
-		overworld_manager.try_move(Vector2i(1, 0))
+func handle_input(_event: InputEvent) -> void:
+	return
 
 func _on_encounter_requested(data: Dictionary) -> void:
 	machine.change_state("CombatState", data)

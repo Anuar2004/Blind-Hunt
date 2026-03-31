@@ -26,7 +26,6 @@ func _draw() -> void:
 		return
 
 	_draw_top_left_status(font)
-	_draw_top_right_controls(font)
 	_draw_bottom_log(font)
 
 	if _is_combat():
@@ -35,7 +34,6 @@ func _draw() -> void:
 func _draw_top_left_status(font) -> void:
 	var start := Vector2(20, 20)
 
-	# HP panel
 	var hp_panel_pos := start
 	var hp_panel_size := Vector2(280, 56)
 	_draw_panel(hp_panel_pos, hp_panel_size)
@@ -60,7 +58,6 @@ func _draw_top_left_status(font) -> void:
 
 	draw_rect(Rect2(bar_pos, Vector2(bar_size.x * hp_ratio, bar_size.y)), hp_color, true)
 
-	# Mode panel
 	var mode_panel_pos := hp_panel_pos + Vector2(0, 68)
 	var mode_panel_size := Vector2(280, 58)
 	_draw_panel(mode_panel_pos, mode_panel_size)
@@ -86,7 +83,6 @@ func _draw_top_left_status(font) -> void:
 			MUTED_TEXT
 		)
 
-	# Skills panel
 	var skills_panel_pos := mode_panel_pos + Vector2(0, 50)
 	var skills_panel_size := Vector2(280, 78)
 	_draw_panel(skills_panel_pos, skills_panel_size)
@@ -97,37 +93,18 @@ func _draw_top_left_status(font) -> void:
 	var smell_lvl := int(Session.skills.get("smell", 1))
 	var echo_lvl := int(Session.skills.get("echo", 1))
 
-	draw_string(font, skills_panel_pos + Vector2(10, 38), "1 Hearing: %d" % hearing_lvl, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, MUTED_TEXT)
-	draw_string(font, skills_panel_pos + Vector2(10, 56), "2 Smell:   %d" % smell_lvl, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, MUTED_TEXT)
+	draw_string(font, skills_panel_pos + Vector2(10, 38), "Hearing: %d" % hearing_lvl, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, MUTED_TEXT)
+	draw_string(font, skills_panel_pos + Vector2(10, 56), "Smell:   %d" % smell_lvl, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, MUTED_TEXT)
 
 	if _is_combat():
-		draw_string(font, skills_panel_pos + Vector2(10, 74), "3 Touch:   %d" % echo_lvl, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, MUTED_TEXT)
+		draw_string(font, skills_panel_pos + Vector2(10, 74), "Touch:   %d" % echo_lvl, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, MUTED_TEXT)
 	else:
-		draw_string(font, skills_panel_pos + Vector2(10, 74), "3 Echo:    %d" % echo_lvl, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, MUTED_TEXT)
-
-func _draw_top_right_controls(font) -> void:
-	var lines := _get_control_lines()
-	var hud_size := _hud_size()
-
-	var panel_w := 330.0
-	var line_h := 18.0
-	var panel_h := 18.0 + float(lines.size()) * line_h + 10.0
-	var panel_pos := Vector2(hud_size.x - panel_w - 20.0, 20.0)
-	var panel_size := Vector2(panel_w, panel_h)
-
-	_draw_panel(panel_pos, panel_size)
-
-	draw_string(font, panel_pos + Vector2(10, 18), "Controls", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, TEXT_COLOR)
-
-	var y := panel_pos.y + 38.0
-	for line in lines:
-		draw_string(font, Vector2(panel_pos.x + 10.0, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, MUTED_TEXT)
-		y += line_h
+		draw_string(font, skills_panel_pos + Vector2(10, 74), "Echo:    %d" % echo_lvl, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, MUTED_TEXT)
 
 func _draw_combat_legend(font) -> void:
 	var hud_size := _hud_size()
 
-	var panel_pos := Vector2(hud_size.x - 330.0 - 20.0, 170.0)
+	var panel_pos := Vector2(hud_size.x - 330.0 - 20.0, 20.0)
 	var panel_size := Vector2(330, 104)
 	_draw_panel(panel_pos, panel_size)
 
@@ -203,27 +180,6 @@ func _get_exploration_phase_text() -> String:
 			return "Turn: Move"
 		_:
 			return "Turn: Use a sense"
-
-func _get_control_lines() -> Array[String]:
-	if _is_combat():
-		return [
-			"Arrows  Move",
-			"Attack  Strike adjacent enemy",
-			"Hearing Sense hearing",
-			"Smell   Sense smell",
-			"Touch   Sense touch",
-			"Debug   Toggle real enemies"
-		]
-
-	return [
-		"Turn loop: 1 sense -> 1 move",
-		"1       Hearing",
-		"2       Smell",
-		"3       Echo",
-		"Arrows  Move after sensing",
-		"0       Clear last sense",
-		"F5/F9   Save / Load"
-	]
 
 func _hud_size() -> Vector2:
 	return get_viewport_rect().size

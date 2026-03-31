@@ -24,6 +24,10 @@ var content_db: Dictionary = {}
 var spawn_table: Array = []
 var signal_spawn_table: Dictionary = {}
 
+var signal_profiles: Dictionary = {}
+var reaction_profiles: Dictionary = {}
+var effect_presets: Dictionary = {}
+
 
 func _ready():
 	randomize()
@@ -39,14 +43,19 @@ func _load_content_db() -> void:
 	content_db.clear()
 	spawn_table.clear()
 	signal_spawn_table.clear()
+	signal_profiles.clear()
+	reaction_profiles.clear()
+	effect_presets.clear()
 
 	if not FileAccess.file_exists(CONTENT_DB_PATH):
 		push_warning("Content DB not found: " + CONTENT_DB_PATH + ". Using built-in fallback content.")
+		_build_default_spawn_tables_if_needed()
 		return
 
 	var file := FileAccess.open(CONTENT_DB_PATH, FileAccess.READ)
 	if file == null:
 		push_warning("Cannot open content DB: " + CONTENT_DB_PATH + ". Using built-in fallback content.")
+		_build_default_spawn_tables_if_needed()
 		return
 
 	var text := file.get_as_text()
@@ -55,17 +64,24 @@ func _load_content_db() -> void:
 	var parsed = JSON.parse_string(text)
 	if typeof(parsed) != TYPE_DICTIONARY:
 		push_warning("Invalid content DB JSON: " + CONTENT_DB_PATH + ". Using built-in fallback content.")
+		_build_default_spawn_tables_if_needed()
 		return
 
 	var root: Dictionary = parsed
 
-	# Поддержка двух форматов:
-	# 1) { "content_types": {...}, "spawn_table": [...], "signal_spawn_table": {...} }
-	# 2) { "fungus_patch": {...}, "traders": {...}, ... }
+	if root.has("signal_profiles") and root["signal_profiles"] is Dictionary:
+		signal_profiles = (root["signal_profiles"] as Dictionary).duplicate(true)
+
+	if root.has("reaction_profiles") and root["reaction_profiles"] is Dictionary:
+		reaction_profiles = (root["reaction_profiles"] as Dictionary).duplicate(true)
+
+	if root.has("effect_presets") and root["effect_presets"] is Dictionary:
+		effect_presets = (root["effect_presets"] as Dictionary).duplicate(true)
+
 	if root.has("content_types"):
-		var content_types = root.get("content_types", {})
-		if content_types is Dictionary:
-			content_db = (content_types as Dictionary).duplicate(true)
+		var raw_content_types = root.get("content_types", {})
+		if raw_content_types is Dictionary:
+			content_db = (raw_content_types as Dictionary).duplicate(true)
 
 		var raw_spawn = root.get("spawn_table", [])
 		if raw_spawn is Array:
@@ -135,7 +151,7 @@ func _pick_weighted_content_type(table: Array) -> String:
 	return "ruins"
 
 # ------------------------------------------------------------
-# ДВИЖЕНИЕ
+# MOVEMENT
 # ------------------------------------------------------------
 
 func can_use_sense() -> bool:
@@ -164,7 +180,7 @@ func try_move(dir: Vector2i) -> void:
 	emit_signal("world_changed")
 
 # ------------------------------------------------------------
-# ГЕНЕРАЦИЯ / НОРМАЛИЗАЦИЯ
+# GENERATION / NORMALIZATION
 # ------------------------------------------------------------
 
 func ensure_ring_with_minimum_signals(center: Vector2i) -> void:
@@ -302,22 +318,145 @@ func _random_content_type_for_signal(signal_name: String) -> String:
 	return _random_content_type()
 
 func _make_content_data(content_type: String) -> Dictionary:
-	var data := _get_content_payload(content_type)
+	var raw := _get_content_payload(content_type)
 
-	if not data.has("name"):
-		data["name"] = content_type
-	if not data.has("signals"):
-		data["signals"] = {}
-	if not data.has("echo_reaction"):
-		data["echo_reaction"] = "none"
+	var out := {
+		"id": content_type,
+		"name": str(raw.get("name", content_type)),
+		"category": str(raw.get("category", "generic")),
+		"tags": [],
+		"signals": {},
+		"reactions": {},
+		"enter_effects": []
+	}
 
-	return data
+	var raw_tags = raw.get("tags", [])
+	if raw_tags is Array:
+		for tag in raw_tags:
+			out["tags"].append(str(tag))
+
+	out["signals"] = _resolve_signals(raw)
+	out["reactions"] = _resolve_reactions(raw)
+	out["enter_effects"] = _resolve_enter_effects(raw)
+
+	if raw.has("encounter_pack"):
+		var encounter_pack := str(raw.get("encounter_pack", ""))
+		if encounter_pack != "":
+			out["enter_effects"].append({
+				"type": "start_encounter",
+				"enemy_pack": encounter_pack
+			})
+
+	return out
+
+func _resolve_signals(raw: Dictionary) -> Dictionary:
+	var resolved: Dictionary = {}
+
+	var inline_signals = raw.get("signals", {})
+	if inline_signals is Dictionary:
+		for signal_name in (inline_signals as Dictionary).keys():
+			var entry = inline_signals[signal_name]
+			if entry is Dictionary:
+				resolved[signal_name] = (entry as Dictionary).duplicate(true)
+
+	var signal_refs = raw.get("signal_refs", {})
+	if signal_refs is Dictionary:
+		for signal_name in (signal_refs as Dictionary).keys():
+			var ref_name := str(signal_refs[signal_name])
+			var profile := _get_signal_profile(ref_name)
+			if not profile.is_empty():
+				resolved[signal_name] = profile
+
+	return resolved
+
+func _resolve_reactions(raw: Dictionary) -> Dictionary:
+	var resolved := {}
+
+	var reactions = raw.get("reactions", {})
+	if reactions is Dictionary:
+		for key in (reactions as Dictionary).keys():
+			var value = reactions[key]
+			if value is String:
+				resolved[key] = _get_reaction_profile(str(value))
+			elif value is Dictionary:
+				resolved[key] = (value as Dictionary).duplicate(true)
+
+	if resolved.is_empty() and raw.has("echo_reaction"):
+		var legacy_reaction := str(raw.get("echo_reaction", "none"))
+		resolved["echo"] = _get_reaction_profile(legacy_reaction)
+
+	if not resolved.has("echo"):
+		resolved["echo"] = _get_reaction_profile("none")
+
+	return resolved
+
+func _resolve_enter_effects(raw: Dictionary) -> Array:
+	var result: Array = []
+
+	var effects = raw.get("enter_effects", [])
+	if effects is Array:
+		for effect in effects:
+			if effect is String:
+				var preset := _get_effect_preset(str(effect))
+				if not preset.is_empty():
+					result.append(preset)
+			elif effect is Dictionary:
+				result.append((effect as Dictionary).duplicate(true))
+
+	return result
+
+func _get_signal_profile(profile_name: String) -> Dictionary:
+	if signal_profiles.has(profile_name):
+		var data = signal_profiles[profile_name]
+		if data is Dictionary:
+			return (data as Dictionary).duplicate(true)
+	return {}
+
+func _get_reaction_profile(profile_name: String) -> Dictionary:
+	if reaction_profiles.has(profile_name):
+		var data = reaction_profiles[profile_name]
+		if data is Dictionary:
+			return (data as Dictionary).duplicate(true)
+
+	match profile_name:
+		"flee":
+			return {
+				"type": "replace_self",
+				"new_content_type": "blood_stain",
+				"set_resolved": true,
+				"clear_alerted": true,
+				"log": "Голоса в панике стихли: кто-то бросился прочь от твоего крика."
+			}
+		"investigate":
+			return {
+				"type": "alert",
+				"log": "Где-то рядом что-то насторожилось от твоего крика.",
+				"intensity_delta": 1
+			}
+		"aggressive":
+			return {
+				"type": "alert",
+				"log": "Твой крик мог привлечь что-то крупное и опасное.",
+				"intensity_delta": 1
+			}
+		_:
+			return {"type": "none"}
+
+func _get_effect_preset(preset_name: String) -> Dictionary:
+	if effect_presets.has(preset_name):
+		var data = effect_presets[preset_name]
+		if data is Dictionary:
+			return (data as Dictionary).duplicate(true)
+	return {}
 
 func _make_fallback_content_data(content_type: String) -> Dictionary:
 	match content_type:
 		"fungus_patch":
 			return {
+				"id": "fungus_patch",
 				"name": "грибная рассада",
+				"category": "resource",
+				"tags": ["nature", "food"],
 				"signals": {
 					SIGNAL_SMELL: {
 						"brief": "землистый запах",
@@ -331,11 +470,15 @@ func _make_fallback_content_data(content_type: String) -> Dictionary:
 						"detail": "низкий силуэт с корневой сеткой"
 					}
 				},
-				"echo_reaction": "none"
+				"reactions": { "echo": {"type": "none"} },
+				"enter_effects": []
 			}
 		"traders":
 			return {
+				"id": "traders",
 				"name": "группа торговцев",
+				"category": "npc",
+				"tags": ["human", "social"],
 				"signals": {
 					SIGNAL_SOUND: {
 						"brief": "голоса",
@@ -349,11 +492,23 @@ func _make_fallback_content_data(content_type: String) -> Dictionary:
 						"detail": "несколько человеческих силуэтов и лёгкие шаги по земле"
 					}
 				},
-				"echo_reaction": "flee"
+				"reactions": {
+					"echo": {
+						"type": "replace_self",
+						"new_content_type": "blood_stain",
+						"set_resolved": true,
+						"clear_alerted": true,
+						"log": "Голоса в панике стихли: кто-то бросился прочь от твоего крика."
+					}
+				},
+				"enter_effects": []
 			}
 		"wolf_pack":
 			return {
-				"name": "стаю волков",
+				"id": "wolf_pack",
+				"name": "стая волков",
+				"category": "enemy",
+				"tags": ["beast", "danger"],
 				"signals": {
 					SIGNAL_SOUND: {
 						"brief": "рычание",
@@ -372,12 +527,23 @@ func _make_fallback_content_data(content_type: String) -> Dictionary:
 						"detail": "несколько приземистых силуэтов, быстро меняющих положение"
 					}
 				},
-				"echo_reaction": "investigate",
-				"encounter_pack": "dogs"
+				"reactions": {
+					"echo": {
+						"type": "alert",
+						"log": "Где-то рядом что-то насторожилось от твоего крика.",
+						"intensity_delta": 1
+					}
+				},
+				"enter_effects": [
+					{"type": "start_encounter", "enemy_pack": "dogs"}
+				]
 			}
 		"large_enemy":
 			return {
-				"name": "крупного монстра",
+				"id": "large_enemy",
+				"name": "крупный монстр",
+				"category": "boss_enemy",
+				"tags": ["monster", "danger"],
 				"signals": {
 					SIGNAL_SOUND: {
 						"brief": "тяжёлые шаги",
@@ -396,12 +562,23 @@ func _make_fallback_content_data(content_type: String) -> Dictionary:
 						"detail": "массивный силуэт, занимающий почти всю клетку"
 					}
 				},
-				"echo_reaction": "aggressive",
-				"encounter_pack": "large_enemy"
+				"reactions": {
+					"echo": {
+						"type": "alert",
+						"log": "Твой крик мог привлечь что-то крупное и опасное.",
+						"intensity_delta": 1
+					}
+				},
+				"enter_effects": [
+					{"type": "start_encounter", "enemy_pack": "large_enemy"}
+				]
 			}
 		"campfire":
 			return {
+				"id": "campfire",
 				"name": "потухающий костёр",
+				"category": "world_object",
+				"tags": ["fire"],
 				"signals": {
 					SIGNAL_SOUND: {
 						"brief": "потрескивание",
@@ -420,11 +597,15 @@ func _make_fallback_content_data(content_type: String) -> Dictionary:
 						"detail": "низкий круглый силуэт вокруг углей"
 					}
 				},
-				"echo_reaction": "none"
+				"reactions": { "echo": {"type": "none"} },
+				"enter_effects": []
 			}
 		"blood_stain":
 			return {
+				"id": "blood_stain",
 				"name": "след крови",
+				"category": "trace",
+				"tags": ["blood", "trail"],
 				"signals": {
 					SIGNAL_SMELL: {
 						"brief": "кровь",
@@ -438,11 +619,15 @@ func _make_fallback_content_data(content_type: String) -> Dictionary:
 						"detail": "смазанный рельеф и сорванный верхний слой земли"
 					}
 				},
-				"echo_reaction": "none"
+				"reactions": { "echo": {"type": "none"} },
+				"enter_effects": []
 			}
 		"pit":
 			return {
-				"name": "яму",
+				"id": "pit",
+				"name": "яма",
+				"category": "hazard",
+				"tags": ["terrain", "danger"],
 				"signals": {
 					SIGNAL_ECHO: {
 						"shape": "pit",
@@ -451,11 +636,25 @@ func _make_fallback_content_data(content_type: String) -> Dictionary:
 						"detail": "резкий провал рельефа с пустым центром"
 					}
 				},
-				"echo_reaction": "none"
+				"reactions": { "echo": {"type": "none"} },
+				"enter_effects": []
+			}
+		"empty":
+			return {
+				"id": "empty",
+				"name": "пустая клетка",
+				"category": "empty",
+				"tags": ["neutral"],
+				"signals": {},
+				"reactions": { "echo": {"type": "none"} },
+				"enter_effects": []
 			}
 		_:
 			return {
+				"id": "ruins",
 				"name": "развалины",
+				"category": "terrain",
+				"tags": ["stone", "obstacle"],
 				"signals": {
 					SIGNAL_ECHO: {
 						"shape": "wall",
@@ -464,7 +663,8 @@ func _make_fallback_content_data(content_type: String) -> Dictionary:
 						"detail": "ровный высокий силуэт, похожий на стену или камень"
 					}
 				},
-				"echo_reaction": "none"
+				"reactions": { "echo": {"type": "none"} },
+				"enter_effects": []
 			}
 
 func _cell_has_signal(cell: Dictionary, signal_name: String) -> bool:
@@ -473,7 +673,7 @@ func _cell_has_signal(cell: Dictionary, signal_name: String) -> bool:
 	return signals.has(signal_name)
 
 # ------------------------------------------------------------
-# СЕНСОРИКА
+# SENSES
 # ------------------------------------------------------------
 
 func use_sense(sense_type: String, level: int) -> Array:
@@ -570,6 +770,12 @@ func _sense_smell(origin: Vector2i, level: int) -> Array:
 	return result
 
 func _sense_echo(origin: Vector2i, level: int) -> Array:
+	return _sense_echo_internal(origin, level, true)
+
+func _sense_echo_passive(origin: Vector2i, level: int) -> Array:
+	return _sense_echo_internal(origin, level, false)
+
+func _sense_echo_internal(origin: Vector2i, level: int, apply_reactions: bool) -> Array:
 	var result: Array = []
 
 	for pos in Session.world.keys():
@@ -592,7 +798,8 @@ func _sense_echo(origin: Vector2i, level: int) -> Array:
 			"shape": str(sg.get("shape", "unknown"))
 		})
 
-		_apply_echo_reaction(pos, cell, origin)
+		if apply_reactions:
+			_apply_echo_reaction(pos, cell, origin)
 
 	return result
 
@@ -628,31 +835,47 @@ func _build_echo_text(sg: Dictionary, level: int) -> String:
 			return str(sg.get("detail", sg.get("mid", sg.get("brief", "силуэт"))))
 
 func _apply_echo_reaction(pos: Vector2i, cell: Dictionary, origin: Vector2i) -> void:
-	var reaction := str(cell.get("content", {}).get("echo_reaction", "none"))
-	match reaction:
-		"flee":
-			_apply_flee_reaction(pos, cell, origin)
-		"investigate":
-			_apply_alert_reaction(cell, "Где-то рядом что-то насторожилось от твоего крика.")
-		"aggressive":
-			_apply_alert_reaction(cell, "Твой крик мог привлечь что-то крупное и опасное.")
+	var reactions: Dictionary = cell.get("content", {}).get("reactions", {})
+	var reaction: Dictionary = reactions.get("echo", {"type": "none"})
+
+	match str(reaction.get("type", "none")):
+		"alert":
+			_apply_alert_reaction(cell, reaction)
+		"replace_self":
+			_apply_replace_self_reaction(pos, cell, reaction)
+		"none":
+			pass
 		_:
 			pass
 
-func _apply_alert_reaction(cell: Dictionary, msg: String) -> void:
+func _apply_alert_reaction(cell: Dictionary, reaction: Dictionary) -> void:
 	if bool(cell.get("alerted", false)):
 		return
-	cell["alerted"] = true
-	cell["intensity"] = min(5, int(cell.get("intensity", 1)) + 1)
-	Session.add_log(msg)
 
-func _apply_flee_reaction(pos: Vector2i, cell: Dictionary, origin: Vector2i) -> void:
+	cell["alerted"] = true
+	var delta := int(reaction.get("intensity_delta", 1))
+	cell["intensity"] = min(5, int(cell.get("intensity", 1)) + delta)
+
+	var msg := str(reaction.get("log", "Что-то насторожилось от твоего действия."))
+	if msg != "":
+		Session.add_log(msg)
+
+func _apply_replace_self_reaction(pos: Vector2i, cell: Dictionary, reaction: Dictionary) -> void:
 	if bool(cell.get("resolved", false)):
 		return
-	cell["resolved"] = true
-	_apply_content_type(cell, "blood_stain")
-	cell["alerted"] = false
-	Session.add_log("Голоса в панике стихли: кто-то бросился прочь от твоего крика.")
+
+	var new_content_type := str(reaction.get("new_content_type", "empty"))
+	_apply_content_type(cell, new_content_type)
+
+	if bool(reaction.get("set_resolved", true)):
+		cell["resolved"] = true
+
+	if bool(reaction.get("clear_alerted", false)):
+		cell["alerted"] = false
+
+	var msg := str(reaction.get("log", "Содержимое клетки изменилось."))
+	if msg != "":
+		Session.add_log(msg)
 
 func _build_trail_cells(origin: Vector2i, target: Vector2i, length: int) -> Array:
 	var cells: Array = []
@@ -705,7 +928,7 @@ func _distance_text(dist: float) -> String:
 	return "дальше"
 
 # ------------------------------------------------------------
-# ВХОД В КЛЕТКУ
+# ENTER CELL
 # ------------------------------------------------------------
 
 func resolve_current_cell() -> void:
@@ -715,21 +938,103 @@ func resolve_current_cell() -> void:
 
 	_normalize_cell(cell)
 
-	var encounter_pack := str(cell.get("content", {}).get("encounter_pack", ""))
-	if encounter_pack != "" and not bool(cell.get("resolved", false)):
-		cell["resolved"] = true
-		Session.add_log("Опасность совсем рядом!")
+	if bool(cell.get("resolved", false)):
+		return
 
-		var encounter := {
-			"encounter_id": str(Time.get_unix_time_from_system()),
-			"source_cell": Session.player_pos,
-			"kind": "combat",
-			"enemy_pack": encounter_pack,
-			"danger": int(cell.get("intensity", 1)),
-			"seed": int(Session.seed_value)
-		}
+	var content: Dictionary = cell.get("content", {})
+	var effects: Array = content.get("enter_effects", [])
+	if effects.is_empty():
+		return
 
-		emit_signal("encounter_requested", encounter)
+	for effect in effects:
+		if effect is Dictionary:
+			var should_stop := _apply_cell_effect(cell, effect)
+			if should_stop:
+				break
+
+	emit_signal("world_changed")
+
+func _apply_cell_effect(cell: Dictionary, effect: Dictionary) -> bool:
+	match str(effect.get("type", "")):
+		"start_encounter":
+			cell["resolved"] = true
+			Session.add_log("Опасность совсем рядом!")
+
+			var encounter := {
+				"encounter_id": str(Time.get_unix_time_from_system()),
+				"source_cell": Session.player_pos,
+				"kind": "combat",
+				"enemy_pack": str(effect.get("enemy_pack", "large_enemy")),
+				"danger": int(cell.get("intensity", 1)),
+				"seed": int(Session.seed_value)
+			}
+
+			emit_signal("encounter_requested", encounter)
+			return true
+
+		"log":
+			var text := str(effect.get("text", ""))
+			if text != "":
+				Session.add_log(text)
+
+		"heal":
+			var amount := int(effect.get("amount", 0))
+			var player := get_tree().get_first_node_in_group("player")
+			if player and player.has_method("heal"):
+				player.heal(amount)
+
+		"damage":
+			var dmg := int(effect.get("amount", 0))
+			var player2 := get_tree().get_first_node_in_group("player")
+			if player2 and player2.has_method("take_damage"):
+				player2.take_damage(dmg)
+
+		"replace_content":
+			var new_type := str(effect.get("new_content_type", "empty"))
+			_apply_content_type(cell, new_type)
+			if bool(effect.get("set_resolved", true)):
+				cell["resolved"] = true
+
+		"set_resolved":
+			cell["resolved"] = bool(effect.get("value", true))
+
+		"reveal_adjacent":
+			var sense_type := str(effect.get("sense_type", ""))
+			var level := int(effect.get("level", 1))
+			var apply_reactions := bool(effect.get("apply_reactions", true))
+			_apply_reveal_adjacent_effect(Session.player_pos, sense_type, level, apply_reactions)
+
+	return false
+
+func _apply_reveal_adjacent_effect(origin: Vector2i, sense_type: String, level: int, apply_reactions: bool = true) -> void:
+	var result: Array = []
+
+	match sense_type:
+		"hearing":
+			result = _sense_hearing(origin, level)
+		"smell":
+			result = _sense_smell(origin, level)
+		"echo":
+			result = _sense_echo(origin, level) if apply_reactions else _sense_echo_passive(origin, level)
+		_:
+			return
+
+	for entry in result:
+		_store_observation(entry)
+
+	if not result.is_empty():
+		Session.add_log("Ты получаешь дополнительную подсказку через %s." % _sense_label(sense_type))
+
+func _sense_label(sense_type: String) -> String:
+	match sense_type:
+		"hearing":
+			return "слух"
+		"smell":
+			return "нюх"
+		"echo":
+			return "эхо"
+		_:
+			return sense_type
 
 func _store_observation(entry: Dictionary) -> void:
 	var source_pos: Vector2i = entry.get("source_pos", Vector2i.ZERO)
