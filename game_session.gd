@@ -6,6 +6,7 @@ signal session_loaded
 signal contract_changed
 signal village_updated
 signal run_inventory_changed
+signal endurance_changed
 
 const LOG_MAX := 30
 const AUTOSAVE_PATH := "user://autosave.json"
@@ -13,6 +14,11 @@ const AUTOSAVE_PATH := "user://autosave.json"
 # --- Player ---
 var player_max_hp: int = 50
 var player_hp: int = 50
+
+const DEFAULT_ENDURANCE_MAX := 20
+
+var endurance_max: int = DEFAULT_ENDURANCE_MAX
+var endurance_current: int = DEFAULT_ENDURANCE_MAX
 
 var skills := {
 	"hearing": 1,
@@ -75,6 +81,8 @@ func new_game(new_seed: int = 0) -> void:
 
 	player_max_hp = 50
 	player_hp = player_max_hp
+	endurance_max = DEFAULT_ENDURANCE_MAX
+	endurance_current = endurance_max
 	skills = {"hearing": 1, "smell": 1, "echo": 1}
 
 	home_pos = Vector2i.ZERO
@@ -173,6 +181,7 @@ func begin_selected_run() -> bool:
 	player_pos = home_pos
 	exploration_turn_phase = "sense"
 	player_hp = player_max_hp
+	endurance_current = endurance_max
 	add_log("Ты покидаешь деревню и начинаешь вылазку.")
 	emit_signal("contract_changed")
 	emit_signal("village_updated")
@@ -245,7 +254,12 @@ func get_loot_preview_lines(max_lines: int = 4) -> Array[String]:
 		var item_value = carried_loot[idx]
 		if item_value is Dictionary:
 			var item: Dictionary = item_value
-			out.append("%s (%dс / %dз)" % [str(item.get("name", "добыча")), int(item.get("slots", 1)), int(item.get("value", 0))])
+			out.append("%s (%dс / %dв / %dз)" % [
+				str(item.get("name", "добыча")),
+				int(item.get("slots", 1)),
+				int(item.get("weight", 1)),
+				int(item.get("value", 0))
+			])
 	return out
 
 func get_contract_progress_text() -> String:
@@ -346,6 +360,8 @@ func _reset_run_state_after_resolution() -> void:
 	player_pos = home_pos
 	exploration_turn_phase = "sense"
 	player_hp = player_max_hp
+	endurance_current = endurance_max
+	emit_signal("endurance_changed")
 	emit_signal("contract_changed")
 	emit_signal("village_updated")
 	emit_signal("run_inventory_changed")
@@ -458,6 +474,8 @@ func to_dict() -> Dictionary:
 		"seed_value": seed_value,
 		"player_max_hp": player_max_hp,
 		"player_hp": player_hp,
+		"endurance_max": endurance_max,
+		"endurance_current": endurance_current,
 		"skills": skills,
 		"home_pos": [home_pos.x, home_pos.y],
 		"in_village": in_village,
@@ -484,6 +502,8 @@ func from_dict(data: Dictionary) -> void:
 	seed_value = int(data.get("seed_value", 0))
 	player_max_hp = int(data.get("player_max_hp", 3))
 	player_hp = int(data.get("player_hp", player_max_hp))
+	endurance_max = int(data.get("endurance_max", DEFAULT_ENDURANCE_MAX))
+	endurance_current = int(data.get("endurance_current", endurance_max))
 	skills = data.get("skills", {"hearing": 1, "smell": 1, "echo": 1})
 
 	var home_arr = data.get("home_pos", [0, 0])
@@ -558,6 +578,7 @@ func from_dict(data: Dictionary) -> void:
 	emit_signal("contract_changed")
 	emit_signal("village_updated")
 	emit_signal("run_inventory_changed")
+	emit_signal("endurance_changed")
 	emit_signal("session_loaded")
 
 func _normalize_loot_item(item: Dictionary) -> Dictionary:
@@ -567,6 +588,7 @@ func _normalize_loot_item(item: Dictionary) -> Dictionary:
 		"category": str(item.get("category", "trophy")),
 		"value": max(0, int(item.get("value", 0))),
 		"slots": max(1, int(item.get("slots", 1))),
+		"weight": max(0, int(item.get("weight", 1))),
 		"source": str(item.get("source", "unknown")),
 		"quality": str(item.get("quality", "normal"))
 	}
@@ -586,3 +608,58 @@ func _failure_label(reason: String) -> String:
 			return "охотник пал в бою"
 		_:
 			return reason
+
+func get_carried_loot_weight() -> int:
+	var total := 0
+	for item_value in carried_loot:
+		if item_value is Dictionary:
+			total += max(0, int((item_value as Dictionary).get("weight", 1)))
+	return total
+
+func get_move_endurance_cost() -> int:
+	return 1 + int(floor(float(get_carried_loot_weight()) / 4.0))
+
+func get_endurance_ratio() -> float:
+	if endurance_max <= 0:
+		return 0.0
+	return clamp(float(endurance_current) / float(endurance_max), 0.0, 1.0)
+
+func get_endurance_band() -> String:
+	var ratio := get_endurance_ratio()
+	if ratio > 0.66:
+		return "high"
+	if ratio > 0.33:
+		return "medium"
+	if ratio > 0.10:
+		return "low"
+	return "critical"
+	
+func spend_endurance(amount: int) -> int:
+	amount = max(amount, 0)
+	if amount <= 0:
+		return 0
+
+	var before := endurance_current
+	endurance_current = max(0, endurance_current - amount)
+
+	var spent := before - endurance_current
+	if spent > 0:
+		emit_signal("endurance_changed")
+		request_autosave()
+
+	return spent
+
+func restore_endurance(amount: int) -> int:
+	amount = max(amount, 0)
+	if amount <= 0:
+		return 0
+
+	var before := endurance_current
+	endurance_current = min(endurance_max, endurance_current + amount)
+
+	var restored := endurance_current - before
+	if restored > 0:
+		emit_signal("endurance_changed")
+		request_autosave()
+
+	return restored

@@ -175,11 +175,20 @@ func try_move(dir: Vector2i) -> void:
 		Session.add_log("Сначала используй одно чувство, затем двигайся.")
 		return
 
+	var move_cost := Session.get_move_endurance_cost()
+	var spent := Session.spend_endurance(move_cost)
+
 	Session.player_pos += dir
-	Session.add_log("Ты сделал шаг.")
+	Session.add_log("Ты сделал шаг. -%d выносливости." % spent)
 
 	if Session.player_pos != Session.home_pos:
 		Session.has_left_home_this_run = true
+
+	if Session.endurance_current <= 0:
+		var player := get_tree().get_first_node_in_group("player")
+		if player and player.has_method("take_damage"):
+			player.take_damage(1)
+		Session.add_log("Ты идёшь через силу и теряешь 1 HP.")
 
 	exploration_turn_phase_after_move()
 
@@ -1019,6 +1028,12 @@ func _apply_cell_effect(cell: Dictionary, effect: Dictionary) -> bool:
 			var player := get_tree().get_first_node_in_group("player")
 			if player and player.has_method("heal"):
 				player.heal(amount)
+				
+		"restore_endurance":
+			var amount_end := int(effect.get("amount", 0))
+			var restored := Session.restore_endurance(amount_end)
+			if restored > 0:
+				Session.add_log("Ты восстановил %d выносливости." % restored)
 
 		"damage":
 			var dmg := int(effect.get("amount", 0))

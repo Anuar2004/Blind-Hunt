@@ -164,6 +164,10 @@
 		  "amount": 1
 		},
 		{
+		  "type": "restore_endurance",
+		  "amount": 1
+		},
+		{
 		  "type": "grant_loot",
 		  "item": {
 			"id": "forest_mushrooms",
@@ -171,6 +175,7 @@
 			"category": "resource",
 			"value": 3,
 			"slots": 1,
+			"weight": 1,
 			"source": "fungus_patch",
 			"quality": "normal"
 		  }
@@ -205,6 +210,10 @@
 		{
 		  "type": "heal",
 		  "amount": 1
+		},
+		{
+		  "type": "restore_endurance",
+		  "amount": 2
 		},
 		{
 		  "type": "reveal_adjacent",
@@ -282,6 +291,10 @@
 		{
 		  "type": "heal",
 		  "amount": 1
+		},
+		{
+		  "type": "restore_endurance",
+		  "amount": 3
 		},
 		{
 		  "type": "set_resolved",
@@ -377,6 +390,7 @@
 			"category": "relic",
 			"value": 5,
 			"slots": 1,
+			"weight": 1,
 			"source": "ruins",
 			"quality": "normal"
 		  }

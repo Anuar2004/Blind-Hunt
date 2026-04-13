@@ -22,6 +22,8 @@ func _ready() -> void:
 		Session.contract_changed.connect(queue_redraw)
 	if not Session.run_inventory_changed.is_connected(queue_redraw):
 		Session.run_inventory_changed.connect(queue_redraw)
+	if not Session.endurance_changed.is_connected(queue_redraw):
+		Session.endurance_changed.connect(queue_redraw)
 
 	queue_redraw()
 
@@ -81,7 +83,7 @@ func _draw_status_stack(font) -> void:
 	if _is_village():
 		draw_string(font, senses_panel_pos + Vector2(10, 38), "Gold:     %d" % int(Session.gold), HORIZONTAL_ALIGNMENT_LEFT, -1, 15, MUTED_TEXT)
 		draw_string(font, senses_panel_pos + Vector2(10, 56), "Backpack: %d" % int(Session.backpack_capacity), HORIZONTAL_ALIGNMENT_LEFT, -1, 15, MUTED_TEXT)
-		draw_string(font, senses_panel_pos + Vector2(10, 74), "Profile:  auto-save", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, MUTED_TEXT)
+		draw_string(font, senses_panel_pos + Vector2(10, 74), "Endurance: rested", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, MUTED_TEXT)
 		draw_string(font, senses_panel_pos + Vector2(10, 92), "Contract: %s" % _short_contract_title(), HORIZONTAL_ALIGNMENT_LEFT, panel_w - 20.0, 15, MUTED_TEXT)
 	else:
 		var hearing_lvl := int(Session.skills.get("hearing", 1))
@@ -94,12 +96,14 @@ func _draw_status_stack(font) -> void:
 
 	if not _is_village():
 		var run_panel_pos := senses_panel_pos + Vector2(0, 108)
-		var run_panel_size := Vector2(panel_w, 94)
+		var run_panel_size := Vector2(panel_w, 132)
 		_draw_panel(run_panel_pos, run_panel_size)
 		draw_string(font, run_panel_pos + Vector2(10, 18), "Run", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, TEXT_COLOR)
 		draw_string(font, run_panel_pos + Vector2(10, 38), "Backpack: %d / %d" % [Session.get_backpack_used(), int(Session.backpack_capacity)], HORIZONTAL_ALIGNMENT_LEFT, -1, 15, MUTED_TEXT)
-		draw_string(font, run_panel_pos + Vector2(10, 56), "Loot value: %d" % Session.get_carried_loot_value(), HORIZONTAL_ALIGNMENT_LEFT, -1, 15, MUTED_TEXT)
-		draw_string(font, run_panel_pos + Vector2(10, 74), _loot_preview_inline(), HORIZONTAL_ALIGNMENT_LEFT, panel_w - 20.0, 15, MUTED_TEXT)
+		draw_string(font, run_panel_pos + Vector2(10, 56), "Weight: %d · Step cost: %d" % [Session.get_carried_loot_weight(), Session.get_move_endurance_cost()], HORIZONTAL_ALIGNMENT_LEFT, -1, 15, MUTED_TEXT)
+		draw_string(font, run_panel_pos + Vector2(10, 74), "Endurance: %d / %d" % [Session.endurance_current, Session.endurance_max], HORIZONTAL_ALIGNMENT_LEFT, -1, 15, MUTED_TEXT)
+		draw_string(font, run_panel_pos + Vector2(10, 92), "Loot value: %d" % Session.get_carried_loot_value(), HORIZONTAL_ALIGNMENT_LEFT, -1, 15, MUTED_TEXT)
+		draw_string(font, run_panel_pos + Vector2(10, 110), _loot_preview_inline(), HORIZONTAL_ALIGNMENT_LEFT, panel_w - 20.0, 15, MUTED_TEXT)
 
 func _draw_combat_legend(font) -> void:
 	var hud_size := _hud_size()
