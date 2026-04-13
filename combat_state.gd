@@ -1,14 +1,17 @@
 extends BaseState
 class_name CombatState
 
+@onready var village_layer := get_tree().get_first_node_in_group("village_layer")
 @onready var overworld_layer = get_tree().get_first_node_in_group("overworld_layer")
 @onready var combat_layer = get_tree().get_first_node_in_group("combat_layer")
 @onready var combat_manager: CombatManager = get_tree().get_first_node_in_group("combat_manager")
 @onready var player := get_tree().get_first_node_in_group("player")
 
-func enter(data := {}):
+func enter(data := {}) -> void:
 	print("ENTER: Combat")
 
+	if village_layer:
+		village_layer.visible = false
 	if overworld_layer:
 		overworld_layer.visible = false
 	if combat_layer:
@@ -20,9 +23,13 @@ func enter(data := {}):
 	if combat_manager:
 		if not combat_manager.combat_finished.is_connected(_on_combat_finished):
 			combat_manager.combat_finished.connect(_on_combat_finished)
-		combat_manager.start_combat(data)
 
-func exit():
+		if bool(data.get("resume_from_autosave", false)) and not Session.combat_snapshot.is_empty():
+			combat_manager.restore_from_dict(Session.combat_snapshot)
+		else:
+			combat_manager.start_combat(data)
+
+func exit() -> void:
 	print("EXIT: Combat")
 
 func handle_input(event: InputEvent) -> void:
@@ -62,4 +69,10 @@ func handle_input(event: InputEvent) -> void:
 		return
 
 func _on_combat_finished(result: Dictionary) -> void:
-	machine.change_state("ExplorationState", result)
+	Session.combat_snapshot.clear()
+	if bool(result.get("victory", false)):
+		machine.change_state("ExplorationState", result)
+		return
+
+	var summary := Session.finish_failed_run("combat_defeat")
+	machine.change_state("VillageState", {"run_summary": summary})

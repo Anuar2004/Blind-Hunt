@@ -35,6 +35,7 @@ var active := false
 # EncounterData текущего боя + hp на старте (для CombatResult)
 var _current_encounter: Dictionary = {}
 var _hp_at_start: int = 0
+var _total_enemies_spawned: int = 0
 
 # ------------------------------------------------------------
 # Fog-of-war: отдельные кляксы по врагам
@@ -68,18 +69,23 @@ func try_move(dir: Vector2i) -> void:
 		return
 	_try_player_move(dir)
 	emit_signal("changed")
+	Session.request_autosave()
 
 func try_attack() -> void:
 	if not active or phase != Phase.PLAYER_TURN:
 		return
 	_try_player_attack()
 	emit_signal("changed")
+	if active:
+		Session.request_autosave()
 
 func use_sense(sense_type: String) -> void:
 	if not active or phase != Phase.PLAYER_TURN:
 		return
 	_use_combat_sense(sense_type)
 	emit_signal("changed")
+	if active:
+		Session.request_autosave()
 
 func toggle_debug_show_enemies() -> void:
 	debug_show_real_enemies = not debug_show_real_enemies
@@ -117,6 +123,7 @@ func start_combat(encounter: Dictionary = {}) -> void:
 
 	# 2) Спавним врагов с учётом деревьев
 	_spawn_enemies(rng, danger)
+	_total_enemies_spawned = enemy_positions.size()
 
 	# совместимость
 	if not enemy_positions.is_empty():
@@ -161,16 +168,80 @@ func end_combat(victory: bool) -> void:
 	else:
 		Session.add_log("Ты проиграл бой.")
 
+	var loot: Array = _build_loot_for_victory() if victory else []
 	var result := {
 		"encounter_id": str(_current_encounter.get("encounter_id", "")),
 		"source_cell": _current_encounter.get("source_cell", Vector2i.ZERO),
 		"victory": victory,
 		"player_hp_delta": int(Session.player_hp) - _hp_at_start,
 		"world_effects": [],
-		"loot": []
+		"loot": loot,
+		"enemy_pack": str(_current_encounter.get("enemy_pack", "")),
+		"defeated_count": _total_enemies_spawned if victory else 0
 	}
 
 	emit_signal("combat_finished", result)
+
+func _build_loot_for_victory() -> Array:
+	var loot: Array = []
+	var pack := str(_current_encounter.get("enemy_pack", ""))
+	var danger := int(_current_encounter.get("danger", 1))
+
+	match pack:
+		"dogs":
+			for _i in range(max(1, _total_enemies_spawned)):
+				loot.append({
+					"id": "wolf_fang",
+					"name": "Волчий клык",
+					"category": "trophy",
+					"value": 2,
+					"slots": 1,
+					"source": "dogs",
+					"quality": "normal"
+				})
+			if _total_enemies_spawned >= 2:
+				loot.append({
+					"id": "wolf_pelt",
+					"name": "Волчья шкура",
+					"category": "trophy",
+					"value": 5,
+					"slots": 2,
+					"source": "dogs",
+					"quality": "normal"
+				})
+		"large_enemy":
+			loot.append({
+				"id": "monster_hide",
+				"name": "Шкура чудовища",
+				"category": "trophy",
+				"value": 12,
+				"slots": 4,
+				"source": "large_enemy",
+				"quality": "normal"
+			})
+			loot.append({
+				"id": "monster_fang",
+				"name": "Клык чудовища",
+				"category": "trophy",
+				"value": 5,
+				"slots": 1,
+				"source": "large_enemy",
+				"quality": "normal"
+			})
+			if danger >= 3:
+				loot.append({
+					"id": "predator_gland",
+					"name": "Хищная железа",
+					"category": "rare_sample",
+					"value": 7,
+					"slots": 2,
+					"source": "large_enemy",
+					"quality": "rare"
+				})
+		_:
+			pass
+
+	return loot
 
 # ------------------------------------------------------------
 # SENSES
@@ -660,3 +731,139 @@ func _fallback_step(from: Vector2i, to: Vector2i) -> Vector2i:
 
 func _in_bounds(p: Vector2i) -> bool:
 	return p.x >= 0 and p.x < W and p.y >= 0 and p.y < H
+
+
+func to_dict() -> Dictionary:
+	var terrain_list: Array = []
+	for pos in terrain.keys():
+		if typeof(pos) != TYPE_VECTOR2I:
+			continue
+		terrain_list.append({"pos": [pos.x, pos.y], "kind": str(terrain[pos])})
+
+	var known_terrain_list: Array = []
+	for pos in known_terrain.keys():
+		if typeof(pos) != TYPE_VECTOR2I:
+			continue
+		known_terrain_list.append([pos.x, pos.y])
+
+	var scent_list: Array = []
+	for pos in scent.keys():
+		if typeof(pos) != TYPE_VECTOR2I:
+			continue
+		scent_list.append({"pos": [pos.x, pos.y], "entry": scent[pos]})
+
+	var known_scent_list: Array = []
+	for pos in known_scent.keys():
+		if typeof(pos) != TYPE_VECTOR2I:
+			continue
+		known_scent_list.append([pos.x, pos.y])
+
+	var visible_blobs: Array = []
+	for blob in enemy_candidates_by_enemy:
+		visible_blobs.append(_serialize_vec2i_array(blob))
+
+	var hidden_blobs: Array = []
+	for blob in hidden_hearing_blobs_by_enemy:
+		hidden_blobs.append(_serialize_vec2i_array(blob))
+
+	var encounter_data: Dictionary = _current_encounter.duplicate(true)
+	var encounter_source = encounter_data.get("source_cell", Vector2i.ZERO)
+	if typeof(encounter_source) == TYPE_VECTOR2I:
+		var v: Vector2i = encounter_source
+		encounter_data["source_cell"] = [v.x, v.y]
+	elif encounter_source is Array and encounter_source.size() >= 2:
+		encounter_data["source_cell"] = [int(encounter_source[0]), int(encounter_source[1])]
+	else:
+		encounter_data["source_cell"] = [0, 0]
+
+	return {
+		"active": active,
+		"phase": int(phase),
+		"player_grid_pos": [player_grid_pos.x, player_grid_pos.y],
+		"enemy_positions": _serialize_vec2i_array(enemy_positions),
+		"enemy_hps": enemy_hps.duplicate(),
+		"enemy_grid_pos": [enemy_grid_pos.x, enemy_grid_pos.y],
+		"enemy_hp": enemy_hp,
+		"current_encounter": encounter_data,
+		"hp_at_start": _hp_at_start,
+		"total_enemies_spawned": _total_enemies_spawned,
+		"last_combat_sense_type": last_combat_sense_type,
+		"debug_show_real_enemies": debug_show_real_enemies,
+		"terrain": terrain_list,
+		"known_terrain": known_terrain_list,
+		"scent": scent_list,
+		"known_scent": known_scent_list,
+		"enemy_candidates_by_enemy": visible_blobs,
+		"hidden_hearing_blobs_by_enemy": hidden_blobs
+	}
+
+func restore_from_dict(data: Dictionary) -> void:
+	active = bool(data.get("active", false))
+	phase = int(data.get("phase", int(Phase.PLAYER_TURN)))
+
+	var player_arr = data.get("player_grid_pos", [W / 2, H / 2])
+	player_grid_pos = Vector2i(int(player_arr[0]), int(player_arr[1]))
+
+	enemy_positions = _deserialize_vec2i_array(data.get("enemy_positions", []))
+	enemy_hps.clear()
+	for hp in data.get("enemy_hps", []):
+		enemy_hps.append(int(hp))
+
+	var enemy_arr = data.get("enemy_grid_pos", [W / 2 + 2, H / 2])
+	enemy_grid_pos = Vector2i(int(enemy_arr[0]), int(enemy_arr[1]))
+	enemy_hp = int(data.get("enemy_hp", 0))
+	_current_encounter = data.get("current_encounter", {})
+	var source_cell_value = _current_encounter.get("source_cell", Vector2i.ZERO)
+	if typeof(source_cell_value) == TYPE_VECTOR2I:
+		pass
+	elif source_cell_value is Array and source_cell_value.size() >= 2:
+		_current_encounter["source_cell"] = Vector2i(int(source_cell_value[0]), int(source_cell_value[1]))
+	else:
+		_current_encounter["source_cell"] = Vector2i.ZERO
+	_hp_at_start = int(data.get("hp_at_start", int(Session.player_hp)))
+	_total_enemies_spawned = int(data.get("total_enemies_spawned", enemy_positions.size()))
+	last_combat_sense_type = str(data.get("last_combat_sense_type", ""))
+	debug_show_real_enemies = bool(data.get("debug_show_real_enemies", false))
+
+	terrain.clear()
+	for entry in data.get("terrain", []):
+		var pos_arr = entry.get("pos", [0, 0])
+		terrain[Vector2i(int(pos_arr[0]), int(pos_arr[1]))] = str(entry.get("kind", ""))
+
+	known_terrain.clear()
+	for pos_arr in data.get("known_terrain", []):
+		known_terrain[Vector2i(int(pos_arr[0]), int(pos_arr[1]))] = true
+
+	scent.clear()
+	for entry in data.get("scent", []):
+		var pos_arr = entry.get("pos", [0, 0])
+		scent[Vector2i(int(pos_arr[0]), int(pos_arr[1]))] = entry.get("entry", {})
+
+	known_scent.clear()
+	for pos_arr in data.get("known_scent", []):
+		known_scent[Vector2i(int(pos_arr[0]), int(pos_arr[1]))] = true
+
+	enemy_candidates_by_enemy.clear()
+	for blob in data.get("enemy_candidates_by_enemy", []):
+		enemy_candidates_by_enemy.append(_deserialize_vec2i_array(blob))
+
+	hidden_hearing_blobs_by_enemy.clear()
+	for blob in data.get("hidden_hearing_blobs_by_enemy", []):
+		hidden_hearing_blobs_by_enemy.append(_deserialize_vec2i_array(blob))
+
+	emit_signal("changed")
+
+func _serialize_vec2i_array(source: Array) -> Array:
+	var out: Array = []
+	for value in source:
+		if typeof(value) == TYPE_VECTOR2I:
+			out.append([value.x, value.y])
+	return out
+
+func _deserialize_vec2i_array(source: Array) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	if source is Array:
+		for value in source:
+			if value is Array and value.size() >= 2:
+				out.append(Vector2i(int(value[0]), int(value[1])))
+	return out

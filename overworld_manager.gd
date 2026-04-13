@@ -2,6 +2,7 @@ extends Node
 class_name OverworldManager
 
 signal encounter_requested(data: Dictionary)
+signal run_returned_home(data: Dictionary)
 signal world_changed
 
 const CELL_SIZE := 64
@@ -166,6 +167,10 @@ func exploration_turn_phase_after_move() -> void:
 	last_sense_result.clear()
 
 func try_move(dir: Vector2i) -> void:
+	if not Session.run_active:
+		Session.add_log("Сначала начни забег из деревни.")
+		return
+
 	if not can_move():
 		Session.add_log("Сначала используй одно чувство, затем двигайся.")
 		return
@@ -173,11 +178,31 @@ func try_move(dir: Vector2i) -> void:
 	Session.player_pos += dir
 	Session.add_log("Ты сделал шаг.")
 
+	if Session.player_pos != Session.home_pos:
+		Session.has_left_home_this_run = true
+
 	exploration_turn_phase_after_move()
 
+	if Session.has_left_home_this_run and Session.player_pos == Session.home_pos:
+		var summary := Session.finish_successful_return()
+		emit_signal("world_changed")
+		emit_signal("run_returned_home", summary)
+		return
+
 	ensure_ring_with_minimum_signals(Session.player_pos)
+	_mark_current_cell_visited()
 	resolve_current_cell()
 	emit_signal("world_changed")
+	Session.request_autosave()
+
+func return_to_village_now() -> void:
+	if not Session.run_active:
+		Session.add_log("Сейчас нет активной вылазки.")
+		return
+
+	var summary := Session.force_return_to_village()
+	emit_signal("world_changed")
+	emit_signal("run_returned_home", summary)
 
 # ------------------------------------------------------------
 # GENERATION / NORMALIZATION
@@ -227,6 +252,7 @@ func generate_cell(pos: Vector2i) -> Dictionary:
 		"intensity": randi_range(1, 5),
 		"resolved": false,
 		"alerted": false,
+		"visited": false,
 		"revealed": {
 			"hearing": false,
 			"smell": false,
@@ -677,6 +703,10 @@ func _cell_has_signal(cell: Dictionary, signal_name: String) -> bool:
 # ------------------------------------------------------------
 
 func use_sense(sense_type: String, level: int) -> Array:
+	if not Session.run_active:
+		Session.add_log("Сначала начни забег из деревни.")
+		return []
+
 	if not can_use_sense():
 		Session.add_log("Ты уже использовал чувство в этом ходе. Теперь нужно двигаться.")
 		return []
@@ -710,6 +740,7 @@ func use_sense(sense_type: String, level: int) -> Array:
 	Session.exploration_turn_phase = "move"
 
 	emit_signal("world_changed")
+	Session.request_autosave()
 	return result
 
 func _is_adjacent_cell(origin: Vector2i, pos: Vector2i) -> bool:
@@ -726,6 +757,8 @@ func _sense_hearing(origin: Vector2i, level: int) -> Array:
 
 		var cell: Dictionary = Session.world[pos]
 		_normalize_cell(cell)
+		if bool(cell.get("visited", false)):
+			continue
 		if not _cell_has_signal(cell, SIGNAL_SOUND):
 			continue
 
@@ -751,6 +784,8 @@ func _sense_smell(origin: Vector2i, level: int) -> Array:
 
 		var cell: Dictionary = Session.world[pos]
 		_normalize_cell(cell)
+		if bool(cell.get("visited", false)):
+			continue
 		if not _cell_has_signal(cell, SIGNAL_SMELL):
 			continue
 
@@ -784,6 +819,8 @@ func _sense_echo_internal(origin: Vector2i, level: int, apply_reactions: bool) -
 
 		var cell: Dictionary = Session.world[pos]
 		_normalize_cell(cell)
+		if bool(cell.get("visited", false)):
+			continue
 		if not _cell_has_signal(cell, SIGNAL_ECHO):
 			continue
 
@@ -989,6 +1026,14 @@ func _apply_cell_effect(cell: Dictionary, effect: Dictionary) -> bool:
 			if player2 and player2.has_method("take_damage"):
 				player2.take_damage(dmg)
 
+		"grant_loot":
+			var loot_item = effect.get("item", {})
+			if loot_item is Dictionary:
+				Session.add_loot((loot_item as Dictionary).duplicate(true))
+
+		"register_track":
+			Session.register_track(str(effect.get("track_id", "")), int(effect.get("count", 1)))
+
 		"replace_content":
 			var new_type := str(effect.get("new_content_type", "empty"))
 			_apply_content_type(cell, new_type)
@@ -1057,7 +1102,30 @@ func clear_last_sense() -> void:
 	last_sense_result.clear()
 	Session.add_log("Ты даёшь миру снова затихнуть.")
 	emit_signal("world_changed")
+	Session.request_autosave()
 
 func use_sense_by_skill(sense_type: String) -> Array:
 	var level := int(Session.skills.get(sense_type, 1))
 	return use_sense(sense_type, level)
+
+func _mark_current_cell_visited() -> void:
+	if not Session.world.has(Session.player_pos):
+		return
+
+	var cell: Dictionary = Session.world[Session.player_pos]
+	cell["visited"] = true
+
+	var filtered_observations: Array = []
+	for entry_value in Session.observations:
+		if typeof(entry_value) != TYPE_DICTIONARY:
+			continue
+
+		var entry: Dictionary = entry_value
+		var source_pos = entry.get("source_pos", Vector2i.ZERO)
+
+		if typeof(source_pos) == TYPE_VECTOR2I and source_pos == Session.player_pos:
+			continue
+
+		filtered_observations.append(entry)
+
+	Session.observations = filtered_observations

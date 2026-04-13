@@ -11,7 +11,6 @@
 	  "mid": "переплетение корней",
 	  "detail": "низкий силуэт с корневой сеткой"
 	},
-
 	"human_voices": {
 	  "brief": "голоса",
 	  "mid": "разговор нескольких людей",
@@ -23,7 +22,6 @@
 	  "mid": "человеческий силуэт",
 	  "detail": "несколько человеческих силуэтов и лёгкие шаги по земле"
 	},
-
 	"wolf_sound": {
 	  "brief": "рычание",
 	  "mid": "короткие рыки и быстрые шаги",
@@ -40,7 +38,6 @@
 	  "mid": "несколько звериных силуэтов",
 	  "detail": "несколько приземистых силуэтов, быстро меняющих положение"
 	},
-
 	"heavy_sound": {
 	  "brief": "тяжёлые шаги",
 	  "mid": "тяжёлые шаги и скрежет",
@@ -57,7 +54,6 @@
 	  "mid": "крупный силуэт",
 	  "detail": "массивный силуэт, занимающий почти всю клетку"
 	},
-
 	"fire_sound": {
 	  "brief": "потрескивание",
 	  "mid": "тихое потрескивание углей",
@@ -74,7 +70,6 @@
 	  "mid": "низкая преграда",
 	  "detail": "низкий круглый силуэт вокруг углей"
 	},
-
 	"blood_smell": {
 	  "brief": "кровь",
 	  "mid": "свежая кровь",
@@ -86,14 +81,12 @@
 	  "mid": "рваный след на земле",
 	  "detail": "смазанный рельеф и сорванный верхний слой земли"
 	},
-
 	"pit_echo": {
 	  "shape": "pit",
 	  "brief": "пустой провал",
 	  "mid": "углубление в земле",
 	  "detail": "резкий провал рельефа с пустым центром"
 	},
-
 	"wall_echo": {
 	  "shape": "wall",
 	  "brief": "высокий контур",
@@ -101,7 +94,6 @@
 	  "detail": "ровный высокий силуэт, похожий на стену или камень"
 	}
   },
-
   "reaction_profiles": {
 	"none": {
 	  "type": "none"
@@ -124,7 +116,6 @@
 	  "log": "Голоса в панике стихли: кто-то бросился прочь от твоего крика."
 	}
   },
-
   "effect_presets": {
 	"encounter_wolves": {
 	  "type": "start_encounter",
@@ -135,23 +126,27 @@
 	  "enemy_pack": "large_enemy"
 	}
   },
-
   "content_types": {
 	"empty": {
 	  "name": "пустая клетка",
 	  "category": "empty",
-	  "tags": ["neutral"],
+	  "tags": [
+        "neutral"
+	  ],
 	  "signal_refs": {},
 	  "reactions": {
 		"echo": "none"
 	  },
 	  "enter_effects": []
 	},
-
 	"fungus_patch": {
 	  "name": "грибная рассада",
 	  "category": "resource",
-	  "tags": ["nature", "food", "passive"],
+	  "tags": [
+		"nature",
+		"food",
+        "passive"
+	  ],
 	  "signal_refs": {
 		"smell": "fungus_smell",
 		"echo": "roots_echo"
@@ -169,17 +164,32 @@
 		  "amount": 1
 		},
 		{
+		  "type": "grant_loot",
+		  "item": {
+			"id": "forest_mushrooms",
+			"name": "Лесные грибы",
+			"category": "resource",
+			"value": 3,
+			"slots": 1,
+			"source": "fungus_patch",
+			"quality": "normal"
+		  }
+		},
+		{
 		  "type": "replace_content",
 		  "new_content_type": "empty",
 		  "set_resolved": true
 		}
 	  ]
 	},
-
 	"traders": {
 	  "name": "группа торговцев",
 	  "category": "npc",
-	  "tags": ["human", "social", "moving"],
+	  "tags": [
+		"human",
+		"social",
+        "moving"
+	  ],
 	  "signal_refs": {
 		"sound": "human_voices",
 		"echo": "human_echo"
@@ -208,11 +218,14 @@
 		}
 	  ]
 	},
-
 	"wolf_pack": {
 	  "name": "стая волков",
 	  "category": "enemy",
-	  "tags": ["beast", "danger", "pack"],
+	  "tags": [
+		"beast",
+		"danger",
+        "pack"
+	  ],
 	  "signal_refs": {
 		"sound": "wolf_sound",
 		"smell": "wolf_smell",
@@ -225,11 +238,14 @@
         "encounter_wolves"
 	  ]
 	},
-
 	"large_enemy": {
 	  "name": "крупный монстр",
 	  "category": "boss_enemy",
-	  "tags": ["monster", "danger", "elite"],
+	  "tags": [
+		"monster",
+		"danger",
+        "elite"
+	  ],
 	  "signal_refs": {
 		"sound": "heavy_sound",
 		"smell": "predator_smell",
@@ -242,11 +258,14 @@
         "encounter_large_enemy"
 	  ]
 	},
-
 	"campfire": {
 	  "name": "потухающий костёр",
 	  "category": "world_object",
-	  "tags": ["fire", "human_activity", "passive"],
+	  "tags": [
+		"fire",
+		"human_activity",
+        "passive"
+	  ],
 	  "signal_refs": {
 		"sound": "fire_sound",
 		"smell": "smoke_smell",
@@ -270,11 +289,14 @@
 		}
 	  ]
 	},
-
 	"blood_stain": {
 	  "name": "след крови",
 	  "category": "trace",
-	  "tags": ["blood", "trail", "danger_hint"],
+	  "tags": [
+		"blood",
+		"trail",
+        "danger_hint"
+	  ],
 	  "signal_refs": {
 		"smell": "blood_smell",
 		"echo": "tracks_echo"
@@ -288,6 +310,11 @@
 		  "text": "Свежая кровь подсказывает направление. След ведёт дальше."
 		},
 		{
+		  "type": "register_track",
+		  "track_id": "predator_trace",
+		  "count": 1
+		},
+		{
 		  "type": "reveal_adjacent",
 		  "sense_type": "smell",
 		  "level": 2
@@ -298,11 +325,14 @@
 		}
 	  ]
 	},
-
 	"pit": {
 	  "name": "яма",
 	  "category": "hazard",
-	  "tags": ["terrain", "hole", "danger"],
+	  "tags": [
+		"terrain",
+		"hole",
+        "danger"
+	  ],
 	  "signal_refs": {
 		"echo": "pit_echo"
 	  },
@@ -320,11 +350,14 @@
 		}
 	  ]
 	},
-
 	"ruins": {
 	  "name": "развалины",
 	  "category": "terrain",
-	  "tags": ["stone", "obstacle", "old"],
+	  "tags": [
+		"stone",
+		"obstacle",
+        "old"
+	  ],
 	  "signal_refs": {
 		"echo": "wall_echo"
 	  },
@@ -335,6 +368,18 @@
 		{
 		  "type": "log",
 		  "text": "Каменные развалины дают тебе хороший отклик пространства."
+		},
+		{
+		  "type": "grant_loot",
+		  "item": {
+			"id": "ancient_fragment",
+			"name": "Древний фрагмент",
+			"category": "relic",
+			"value": 5,
+			"slots": 1,
+			"source": "ruins",
+			"quality": "normal"
+		  }
 		},
 		{
 		  "type": "reveal_adjacent",
@@ -349,21 +394,61 @@
 	  ]
 	}
   },
-
   "spawn_table": [
-	{ "type": "fungus_patch", "weight": 16 },
-	{ "type": "traders", "weight": 14 },
-	{ "type": "wolf_pack", "weight": 14 },
-	{ "type": "large_enemy", "weight": 10 },
-	{ "type": "campfire", "weight": 15 },
-	{ "type": "blood_stain", "weight": 13 },
-	{ "type": "pit", "weight": 10 },
-	{ "type": "ruins", "weight": 8 }
+	{
+	  "type": "fungus_patch",
+	  "weight": 16
+	},
+	{
+	  "type": "traders",
+	  "weight": 14
+	},
+	{
+	  "type": "wolf_pack",
+	  "weight": 14
+	},
+	{
+	  "type": "large_enemy",
+	  "weight": 10
+	},
+	{
+	  "type": "campfire",
+	  "weight": 15
+	},
+	{
+	  "type": "blood_stain",
+	  "weight": 13
+	},
+	{
+	  "type": "pit",
+	  "weight": 10
+	},
+	{
+	  "type": "ruins",
+	  "weight": 8
+	}
   ],
-
   "signal_spawn_table": {
-	"sound": ["traders", "wolf_pack", "large_enemy", "campfire"],
-	"smell": ["fungus_patch", "blood_stain", "wolf_pack", "large_enemy", "campfire"],
-	"echo": ["ruins", "pit", "traders", "wolf_pack", "campfire", "fungus_patch"]
+	"sound": [
+	  "traders",
+	  "wolf_pack",
+	  "large_enemy",
+      "campfire"
+	],
+	"smell": [
+	  "fungus_patch",
+	  "blood_stain",
+	  "wolf_pack",
+	  "large_enemy",
+      "campfire"
+	],
+	"echo": [
+	  "ruins",
+	  "pit",
+	  "traders",
+	  "wolf_pack",
+	  "campfire",
+      "fungus_patch"
+	]
   }
 }

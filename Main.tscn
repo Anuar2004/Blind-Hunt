@@ -3,24 +3,29 @@
 [ext_resource type="Script" uid="uid://chu57aggtm2ym" path="res://game_state_machine.gd" id="1_r0du0"]
 [ext_resource type="Script" uid="uid://c44og71alwpgd" path="res://exploration_state.gd" id="1_uu6xs"]
 [ext_resource type="Script" uid="uid://dhpoeuhjf1o1f" path="res://combat_state.gd" id="2_r0du0"]
+[ext_resource type="Script" uid="uid://trvlurpyyq2h" path="res://village_state.gd" id="4_20pc6"]
 [ext_resource type="Script" uid="uid://ceyn0d16b6xe" path="res://overworld_layer.gd" id="4_cm0pq"]
 [ext_resource type="Script" uid="uid://qtat6cg6m1bu" path="res://combat_layer.gd" id="5_3dxm6"]
 [ext_resource type="Script" uid="uid://dpfpq3c3sn75x" path="res://combat_manager.gd" id="5_fos0i"]
 [ext_resource type="Script" uid="uid://bhccyq2dkkmms" path="res://overworld_manager.gd" id="5_lgr22"]
 [ext_resource type="Script" uid="uid://c8pxop8wypjyp" path="res://player.gd" id="8_trn2v"]
 [ext_resource type="Script" uid="uid://d2rd4x37gl4r6" path="res://hud.gd" id="9_03owx"]
+[ext_resource type="Script" uid="uid://bjyr6cmybswwp" path="res://village_layer.gd" id="11_5vvyt"]
 
 [node name="Main" type="Node2D" unique_id=243155863]
 
 [node name="GameStateMachine" type="Node" parent="." unique_id=1591733233 groups=["gsm"]]
 script = ExtResource("1_r0du0")
-initial_state_path = NodePath("ExplorationState")
+initial_state_path = NodePath("VillageState")
 
 [node name="ExplorationState" type="Node" parent="GameStateMachine" unique_id=903614903]
 script = ExtResource("1_uu6xs")
 
 [node name="CombatState" type="Node" parent="GameStateMachine" unique_id=1071874870]
 script = ExtResource("2_r0du0")
+
+[node name="VillageState" type="Node" parent="GameStateMachine" unique_id=2147394806]
+script = ExtResource("4_20pc6")
 
 [node name="OverworldLayer" type="Node2D" parent="." unique_id=406752613 groups=["overworld_layer"]]
 script = ExtResource("4_cm0pq")
@@ -48,3 +53,10 @@ anchors_preset = 0
 offset_right = 40.0
 offset_bottom = 40.0
 script = ExtResource("9_03owx")
+
+[node name="VillageLayer" type="Control" parent="." unique_id=1325145993 groups=["village_layer"]]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+script = ExtResource("11_5vvyt")
